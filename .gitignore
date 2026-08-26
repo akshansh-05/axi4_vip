@@ -1,3 +1,8 @@
+# RTL Sources (Managed in Separate Repository)
+axi_master_rtl/
+axi_slave_rtl/
+rtl/
+
 # Cadence Xcelium & Simulator Artifacts
 xcelium.d/
 INCA_libs/
