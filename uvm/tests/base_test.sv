@@ -1,5 +1,6 @@
 // File: base_test.sv
-// Base test class configured via tb_params_pkg and registered with UVM factory.
+// Base test class that builds the environment, configures agents, and prints topology.
+// Specific test sequences are executed in child test classes extending base_test.
 
 `ifndef BASE_TEST_SV
 `define BASE_TEST_SV
@@ -38,6 +39,7 @@ class base_test extends uvm_test;
     endfunction : build_phase
 
     // Default agent configuration: Master Active (for RAM Standalone verification)
+    // Child tests override this hook to change agent mode
     virtual function void configure_agent(cfg_type cfg);
         cfg.is_active = UVM_ACTIVE;
         cfg.is_master = 1'b1;
@@ -48,15 +50,9 @@ class base_test extends uvm_test;
         uvm_top.print_topology();
     endfunction : end_of_elaboration_phase
 
- /* task run_phase(uvm_phase phase);
-        phase.raise_objection(this, "Starting Topology Check Test");
-        `uvm_info("BASE_TEST", "Running Base Test (Topology & Elaboration Check)...", UVM_LOW)
-
-        #50;
-
-        `uvm_info("BASE_TEST", "Topology Check Completed Successfully!", UVM_LOW)
-        phase.drop_objection(this, "Completed Topology Check Test");
-    endtask : run_phase */
+    virtual task run_phase(uvm_phase phase);
+        // Base test topology verification and environment build. 
+    endtask : run_phase
 
 endclass : base_test
 

@@ -8,9 +8,9 @@
 # -------------------------------------------------------------------------------
 # 1. Configurable Parameters & Defaults
 # -------------------------------------------------------------------------------
-TEST       ?= base_test
+TEST       ?= axi_sanity_test
 SEED       ?= random
-VERB       ?= UVM_LOW
+VERB       ?= UVM_MEDIUM
 GUI        ?= 0
 FILELIST   := filelist.f
 LOG_DIR    := logs
@@ -22,6 +22,7 @@ XRUN_BASE  := xrun -64bit -sv -uvm \
               -svseed $(SEED) \
               +UVM_TESTNAME=$(TEST) \
               +UVM_VERBOSITY=$(VERB) \
+              -input waves.tcl \
               -f $(FILELIST)
 
 ifeq ($(GUI), 1)
@@ -49,8 +50,9 @@ help:
 	@echo "    make test_all                  : Test all 3 topologies sequentially"
 	@echo ""
 	@echo " 2. TEST EXECUTION (RAM Verification):"
-	@echo "    make run_ram [TEST=<name>]     : Run test in RAM Standalone mode (Default: base_test)"
-	@echo "    make gui_ram [TEST=<name>]     : Run test with Cadence SimVision Waveform GUI"
+	@echo "    make run_ram [TEST=<name>]     : Run test in batch mode (dumps waves.shm)"
+	@echo "    make waves_ram                 : Open generated waves.shm in Cadence SimVision"
+	@echo "    make gui_ram [TEST=<name>]     : Run test with interactive SimVision GUI"
 	@echo ""
 	@echo " 3. UTILITIES:"
 	@echo "    make clean                     : Remove simulation logs, work libraries, and dumps"

@@ -31,7 +31,7 @@ class axi_driver #(
         vif = cfg.vif;
     endfunction : build_phase
 
-/*    virtual task run_phase(uvm_phase phase);
+    virtual task run_phase(uvm_phase phase);
         reset_signals();
 
         // Wait for reset release before operating
@@ -182,7 +182,7 @@ class axi_driver #(
     virtual task run_slave();
         `uvm_info("DRV", "AXI Slave mode running...", UVM_MEDIUM)
         forever @(posedge vif.clk);
-    endtask : run_slave */
+    endtask : run_slave
 
 endclass : axi_driver
 

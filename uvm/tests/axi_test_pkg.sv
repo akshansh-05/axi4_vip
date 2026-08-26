@@ -14,6 +14,7 @@ package axi_test_pkg;
     import axi_env_pkg::*;
 
     `include "base_test.sv"
+    `include "axi_sanity_test.sv"
 
 endpackage : axi_test_pkg
 
