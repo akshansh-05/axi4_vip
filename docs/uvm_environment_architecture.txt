@@ -1,0 +1,251 @@
+================================================================================
+AXI4 DMA & AXI4 RAM UVM VERIFICATION ENVIRONMENT ARCHITECTURE SPECIFICATION
+================================================================================
+Author:       Akshansh Chaurasia
+Project:      AXI4 VIP & UVM Verification Framework
+Targets:      1. AXI4 DMA Engine (axi_dma.v)
+              2. AXI4 RAM Controller (axi_ram.v)
+              3. AXI4 Subsystem Integration (DMA + RAM Loopback)
+Toolflow:     Cadence Xcelium (xrun) / SystemVerilog UVM 1.2
+================================================================================
+
+
+1. EXECUTIVE SUMMARY & VERIFICATION OBJECTIVES
+--------------------------------------------------------------------------------
+The primary objective of this UVM Verification IP (VIP) is to provide a single,
+modular, highly configurable verification environment that can verify three 
+distinct hardware configurations with zero testbench code duplication:
+
+  [Target 1] AXI4 RAM Standalone (Slave Core Verification)
+             - Tests memory read/write cycles, burst types (INCR, FIXED, WRAP),
+               narrow transfers, byte strobes (WSTRB), address boundary wrap,
+               and pipeline latency.
+
+  [Target 2] AXI4 DMA Standalone (Master Core Verification)
+             - Tests descriptor handling, scatter-gather, unaligned addresses,
+               4KB AXI burst boundaries, AXI-Stream data packing/unpacking,
+               backpressure (TREADY / BREADY / RREADY), and abort handling.
+
+  [Target 3] AXI4 DMA + RAM Subsystem (End-to-End Loopback Verification)
+             - Connects DMA Master directly to RAM Slave. Tests complete end-to-end
+               data paths: Stream-to-Memory (DMA Write) -> Memory-to-Stream (DMA Read).
+
+
+================================================================================
+2. UVM TESTBENCH ARCHITECTURE BLOCK DIAGRAM
+================================================================================
+
+                               +----------------------------------------+
+                               |              axi_test_top              |
+                               +----------------------------------------+
+                                                   |
+                               +----------------------------------------+
+                               |             axi_env (UVC)              |
+                               +----------------------------------------+
+                                                   |
+           +--------------------+------------------+--------------------+
+           |                    |                  |                    |
++--------------------+ +-----------------+ +----------------+ +------------------+
+| dma_rd_desc_agent  | |dma_wr_desc_agent| | axis_wr_agent  | |  axis_rd_agent   |
+| (Read Descriptors) | |(Write Descriptor| |(Stream Input)  | | (Stream Output)  |
++--------------------+ +-----------------+ +----------------+ +------------------+
+           |                    |                  |                    |
+           v                    v                  v                    v
+  [dma_desc_if.rd]     [dma_desc_if.wr]      [axis_if.wr]         [axis_if.rd]
+==================================================================================
+                 +-----------------------------------------------+
+                 |             DUT 1: AXI4 DMA ENGINE            |
+                 +-----------------------------------------------+
+                                         |
+                                    [axi_if] (AXI4-MM Bus)
+                                         |
+                                         v
+                 +-----------------------------------------------+
+                 |             DUT 2: AXI4 RAM MEMORY            |
+                 +-----------------------------------------------+
+==================================================================================
+                                         ^
+                                         |
+                               +-------------------+
+                               |   axi_mm_agent    |
+                               | (Master/Slave/Mon)|
+                               +-------------------+
+                                         |
+                               +-------------------+
+                               |  axi_scoreboard   |  <-- Cross-checking
+                               +-------------------+      Stream & Memory Data
+
+
+================================================================================
+3. THE 5 UVM AGENTS & DETAILED RESPONSIBILITIES
+================================================================================
+
+--------------------------------------------------------------------------------
+AGENT 1: dma_rd_desc_agent (DMA Read Descriptor Channel)
+--------------------------------------------------------------------------------
+* Purpose:
+  Issues Read Descriptors to trigger DMA transfers from Memory-Mapped RAM to
+  the output AXI4-Stream channel. Monitors descriptor completion and error codes.
+
+* Interface Signals:
+  - DRIVES  (via Driver) : s_axis_read_desc_addr, s_axis_read_desc_len,
+                           s_axis_read_desc_tag, s_axis_read_desc_id,
+                           s_axis_read_desc_dest, s_axis_read_desc_user,
+                           s_axis_read_desc_valid, read_enable
+  - MONITORS(via Monitor): s_axis_read_desc_ready, m_axis_read_desc_status_tag,
+                           m_axis_read_desc_status_error, m_axis_read_desc_status_valid
+
+* Sequence Item (dma_desc_seq_item):
+  - bit [ADDR_WIDTH-1:0] addr;
+  - bit [LEN_WIDTH-1:0]  len;
+  - bit [TAG_WIDTH-1:0]  tag;
+  - bit [3:0]            status_error; (0=SUCCESS, 4=SLVERR, 5=DECERR)
+
+
+--------------------------------------------------------------------------------
+AGENT 2: dma_wr_desc_agent (DMA Write Descriptor Channel)
+--------------------------------------------------------------------------------
+* Purpose:
+  Issues Write Descriptors to configure DMA memory target addresses for incoming
+  streaming data. Captures write completion status, transferred lengths, and tags.
+
+* Interface Signals:
+  - DRIVES  (via Driver) : s_axis_write_desc_addr, s_axis_write_desc_len,
+                           s_axis_write_desc_tag, s_axis_write_desc_valid,
+                           write_enable, write_abort
+  - MONITORS(via Monitor): s_axis_write_desc_ready, m_axis_write_desc_status_len,
+                           m_axis_write_desc_status_tag, m_axis_write_desc_status_id,
+                           m_axis_write_desc_status_dest, m_axis_write_desc_status_user,
+                           m_axis_write_desc_status_error, m_axis_write_desc_status_valid
+
+* Sequence Item (dma_desc_seq_item):
+  - bit [ADDR_WIDTH-1:0] addr;
+  - bit [LEN_WIDTH-1:0]  len;
+  - bit [TAG_WIDTH-1:0]  tag;
+  - bit [LEN_WIDTH-1:0]  status_len;
+  - bit [3:0]            status_error; (0=SUCCESS, 6=SLVERR, 7=DECERR)
+
+
+--------------------------------------------------------------------------------
+AGENT 3: axis_wr_agent (AXI4-Stream Write Input Agent)
+--------------------------------------------------------------------------------
+* Purpose:
+  Generates streaming data packets that are fed into the DMA Write Channel to be
+  written into memory. Operates as an AXI-Stream MASTER.
+
+* Interface Signals:
+  - DRIVES  (via Driver) : s_axis_write_data_tdata, s_axis_write_data_tkeep,
+                           s_axis_write_data_tvalid, s_axis_write_data_tlast,
+                           s_axis_write_data_tid, s_axis_write_data_tdest,
+                           s_axis_write_data_tuser
+  - MONITORS(via Monitor): s_axis_write_data_tready
+
+* Sequence Item (axis_seq_item):
+  - rand bit [DATA_WIDTH-1:0] data[];
+  - rand bit [KEEP_WIDTH-1:0] keep[];
+  - rand bit [ID_WIDTH-1:0]   tid;
+  - rand bit [DEST_WIDTH-1:0] tdest;
+  - rand bit [USER_WIDTH-1:0] tuser;
+  - rand int                  packet_len;
+
+
+--------------------------------------------------------------------------------
+AGENT 4: axis_rd_agent (AXI4-Stream Read Output Agent)
+--------------------------------------------------------------------------------
+* Purpose:
+  Receives and verifies streaming data output from the DMA Read Channel.
+  Operates as an AXI-Stream SLAVE (drives TREADY with random/constrained delays).
+
+* Interface Signals:
+  - DRIVES  (via Driver) : m_axis_read_data_tready
+  - MONITORS(via Monitor): m_axis_read_data_tdata, m_axis_read_data_tkeep,
+                           m_axis_read_data_tvalid, m_axis_read_data_tlast,
+                           m_axis_read_data_tid, m_axis_read_data_tdest,
+                           m_axis_read_data_tuser
+
+* Sequence Item (axis_seq_item):
+  - Captures received streaming payload packets and forwards them to the Scoreboard.
+
+
+--------------------------------------------------------------------------------
+AGENT 5: axi_mm_agent (AXI4 Memory-Mapped Bus Agent)
+--------------------------------------------------------------------------------
+* Purpose:
+  A fully configurable AXI4-MM Universal Verification Component (UVC) capable of
+  operating in 3 distinct operational modes:
+    1. ACTIVE MASTER: Directly drives AW/W/B and AR/R bus cycles to verify AXI RAM.
+    2. ACTIVE SLAVE : Acts as a configurable memory model responding to DMA Master
+                      requests (supporting SLVERR, DECERR, wait states, out-of-order).
+    3. PASSIVE MON  : Snoops transactions on the bus between DMA and RAM in Subsystem
+                      mode for protocol checking and scoreboard verification.
+
+* Interface Channels & Signals:
+  - Write Address (AW): awid, awaddr, awlen, awsize, awburst, awvalid, awready
+  - Write Data    (W) : wdata, wstrb, wlast, wvalid, wready
+  - Write Response(B) : bid, bresp, bvalid, bready
+  - Read Address  (AR): arid, araddr, arlen, arsize, arburst, arvalid, arready
+  - Read Data     (R) : rid, rdata, rresp, rlast, rvalid, rready
+
+* Sequence Item (axi_seq_item):
+  - rand bit [ID_WIDTH-1:0]    id;
+  - rand bit [ADDR_WIDTH-1:0]  addr;
+  - rand bit [7:0]             len;
+  - rand bit [2:0]             size;
+  - rand bit [1:0]             burst;
+  - rand bit [DATA_WIDTH-1:0]  data[];
+  - rand bit [STRB_WIDTH-1:0]  strb[];
+  - rand bit [1:0]             resp[];
+
+
+================================================================================
+4. MULTI-TOPOLOGY AGENT CONFIGURATION MATRIX
+================================================================================
+
++-------------------+---------------------------+---------------------------+---------------------------+
+| AGENT NAME        | MODE 1: RAM STANDALONE    | MODE 2: DMA STANDALONE    | MODE 3: SUBSYSTEM LOOPBACK|
+|                   | (+define+RAM_STANDALONE)  | (+define+DMA_STANDALONE)  | (+define+SUBSYSTEM / Dflt)|
++-------------------+---------------------------+---------------------------+---------------------------+
+| dma_rd_desc_agent | UVM_PASSIVE / DISABLED    | UVM_ACTIVE (Master)       | UVM_ACTIVE (Master)       |
+| dma_wr_desc_agent | UVM_PASSIVE / DISABLED    | UVM_ACTIVE (Master)       | UVM_ACTIVE (Master)       |
+| axis_wr_agent     | UVM_PASSIVE / DISABLED    | UVM_ACTIVE (Stream Mstr)  | UVM_ACTIVE (Stream Mstr)  |
+| axis_rd_agent     | UVM_PASSIVE / DISABLED    | UVM_ACTIVE (Stream Slave) | UVM_ACTIVE (Stream Slave) |
+| axi_mm_agent      | UVM_ACTIVE (Bus Master)   | UVM_ACTIVE (Slave Mem Mod)| UVM_PASSIVE (Bus Monitor) |
++-------------------+---------------------------+---------------------------+---------------------------+
+
+
+================================================================================
+5. SCOREBOARD & DATA INTEGRITY CHECKING
+================================================================================
+The `axi_scoreboard` receives transaction streams through UVM Analysis Ports:
+
+1. Mode 1 (RAM Standalone):
+   - Compares data written via AXI Write transactions against data retrieved
+     via AXI Read transactions at matching addresses, respecting WSTRB strobes.
+
+2. Mode 2 (DMA Standalone):
+   - Stream-to-MM Path: Compares incoming Stream packets against AXI Write bursts.
+   - MM-to-Stream Path: Compares AXI Read response data against output Stream packets.
+
+3. Mode 3 (Subsystem Loopback):
+   - Verifies that input stream packets sent via `axis_wr_agent` match exactly
+     with output stream packets received via `axis_rd_agent` after passing through
+     DMA Write -> RAM Storage -> DMA Read.
+
+
+================================================================================
+6. COMPILATION & RUN DIRECTORY WORKFLOW
+================================================================================
+
+In Cadence Xcelium (`run_dir/`):
+
+```bash
+# 1. Run RAM Standalone Tests:
+xrun -64bit -sv -uvm +define+RAM_STANDALONE +UVM_TESTNAME=ram_random_burst_test -f filelist.f
+
+# 2. Run DMA Standalone Tests:
+xrun -64bit -sv -uvm +define+DMA_STANDALONE +UVM_TESTNAME=dma_unaligned_addr_test -f filelist.f
+
+# 3. Run Full Subsystem Loopback Tests:
+xrun -64bit -sv -uvm +UVM_TESTNAME=sys_full_loopback_test -f filelist.f
+```
+================================================================================

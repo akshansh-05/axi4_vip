@@ -1,0 +1,36 @@
+# Cadence Xcelium & Simulator Artifacts
+xcelium.d/
+INCA_libs/
+waves.shm/
+.simvision/
+.bpad/
+*.log
+*.jou
+*.pb
+*.wdb
+*.vcd
+*.fst
+*.out
+*.o
+*.so
+*.key
+*.history
+xrun.*
+logs/
+run_dir/logs/
+run_dir/xcelium.d/
+run_dir/xrun.*
+
+# EDA Tools
+dma_tb
+simv
+xsim.dir/
+csrc/
+work/
+.Xil/
+
+# OS / Editor Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

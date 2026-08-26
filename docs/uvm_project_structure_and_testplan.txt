@@ -1,0 +1,300 @@
+================================================================================
+AXI4 VIP PROJECT STRUCTURE & UVC ENVIRONMENT ARCHITECTURE SPECIFICATION
+================================================================================
+Author:       Akshansh Chaurasia
+Project:      AXI4 DMA & RAM UVM Verification IP (VIP) Suite
+Language:     SystemVerilog (IEEE 1800-2012) / UVM 1.2
+Simulator:    Cadence Xcelium (xrun)
+================================================================================
+
+
+1. MODULAR DIRECTORY TREE (UVCs & ENVIRONMENT FOCUS)
+--------------------------------------------------------------------------------
+This structure isolates each protocol into an independent Universal Verification
+Component (UVC). Sequences and test suites will be added later based on verification
+goals.
+
+axi_design_verif_proj_akshansh/
+│
+├── rtl/                                # Design Under Test (Verilog RTL)
+│   ├── axi_master_rtl/
+│   │   ├── axi_dma.v                   # Top-level DMA wrapper module
+│   │   ├── axi_dma_rd.v                # DMA Read Engine (MM to Stream)
+│   │   └── axi_dma_wr.v                # DMA Write Engine (Stream to MM)
+│   └── axi_slave_rtl/
+│       └── axi_ram.v                   # Synthesizable AXI4 RAM Core
+│
+├── docs/                               # Functional Specifications & Architecture Guides
+│   ├── axi_dma_spec.md                 # DMA core hardware specification
+│   ├── axi_ram_spec.md                 # RAM slave hardware specification
+│   ├── uvm_environment_architecture.txt# 5-Agent operational overview
+│   └── uvm_project_structure_and_testplan.txt # This document (VIP & Env architecture)
+│
+├── run_dir/                            # Cadence Xcelium Simulation Workspace
+│   ├── Makefile                        # Compilation and simulation targets
+│   ├── run_cmd.sh                      # Shell wrapper for xrun execution
+│   └── filelist.f                      # Unified Cadence compile filelist
+│
+└── uvm/                                # UVM Verification IP Framework
+    │
+    ├── interfaces/                     # SystemVerilog Signal Interfaces
+    │   ├── axi_if.sv                   # AXI4 Memory-Mapped Bus (AW, W, B, AR, R channels)
+    │   ├── axis_if.sv                  # AXI4-Stream Interface (TDATA, TKEEP, TREADY, etc.)
+    │   └── dma_desc_if.sv              # DMA Command & Status Descriptor Interface
+    │
+    ├── vip/                            # Protocol Universal Verification Components (UVCs)
+    │   │
+    │   ├── axi_mm_vip/                 # AXI4 Memory-Mapped Protocol UVC
+    │   │   ├── axi_seq_item.sv         # Transaction item (AW/W/B/AR/R fields, burst controls)
+    │   │   ├── axi_driver.sv           # Configurable Master/Slave Driver with reactive memory model
+    │   │   ├── axi_monitor.sv          # Protocol monitor capturing completed bursts
+    │   │   ├── axi_sequencer.sv        # Sequencer for AXI-MM items
+    │   │   ├── axi_agent_config.sv     # Configuration object (is_active, is_master/is_slave)
+    │   │   ├── axi_agent.sv            # Bundles Driver, Monitor, and Sequencer
+    │   │   ├── axi_coverage.sv         # Functional coverage (burst types, sizes, alignments)
+    │   │   └── axi_mm_pkg.sv           # Package importing/including AXI-MM UVC components
+    │   │
+    │   ├── axis_vip/                   # Generic AXI4-Stream Protocol UVC
+    │   │   ├── axis_seq_item.sv        # Packet transaction item (TDATA, TKEEP, TLAST, TID, TDEST)
+    │   │   ├── axis_driver.sv          # Master (drives packet stream) / Slave (drives TREADY)
+    │   │   ├── axis_monitor.sv         # Stream handshake & packet boundary monitor
+    │   │   ├── axis_sequencer.sv       # Stream transaction sequencer
+    │   │   ├── axis_agent_config.sv    # Configures Stream Master vs Slave mode
+    │   │   ├── axis_agent.sv           # Generic Stream Agent (used for wr_agent & rd_agent)
+    │   │   └── axis_pkg.sv             # Package importing/including Stream UVC components
+    │   │
+    │   └── dma_desc_vip/               # DMA Descriptor Command/Status Protocol UVC
+    │       ├── desc_seq_item.sv        # Descriptor command (addr, len, tag) & status return
+    │       ├── desc_driver.sv          # Drives descriptor command handshakes into DMA
+    │       ├── desc_monitor.sv         # Monitors command dispatch & completion status
+    │       ├── desc_sequencer.sv       # Descriptor transaction sequencer
+    │       ├── desc_agent_config.sv    # Channel config (Read vs Write descriptor channel)
+    │       ├── desc_agent.sv           # Generic Descriptor Agent (used for rd_desc & wr_desc)
+    │       └── dma_desc_pkg.sv         # Package importing/including Descriptor UVC components
+    │
+    ├── env/                            # Top-Level Verification Environment
+    │   ├── axi_env_config.sv           # Central configuration object managing all 5 agents
+    │   ├── axi_virtual_sequencer.sv    # Virtual sequencer routing handles to all sub-sequencers
+    │   ├── axi_scoreboard.sv           # End-to-end data integrity & response latency checker
+    │   ├── axi_env.sv                  # Instantiates & connects 5 agents, scoreboard, & virtual sequencer
+    │   └── axi_env_pkg.sv              # Environment Package bundling top env components
+    │
+    └── tb_top.sv                       # `ifdef Gated Top-Level Testbench Module
+
+
+================================================================================
+2. DETAILED UVC COMPONENT ARCHITECTURE & COMMENTARY
+================================================================================
+
+--------------------------------------------------------------------------------
+A. axi_mm_vip (AXI4 Memory-Mapped UVC)
+--------------------------------------------------------------------------------
+* Design Philosophy:
+  Acts as a complete, self-contained AXI4-MM verification component. It is fully
+  bi-directional: it can drive address/data cycles as a Master, or emulate memory
+  and respond to requests as a Slave.
+
+* Files & Responsibilities:
+  1. `axi_seq_item.sv`:
+     - Encapsulates entire AXI4 burst transfers across all 5 channels.
+     - Properties: `awid`/`arid`, `addr`, `burst` (FIXED/INCR/WRAP), `len` (1-256),
+       `size` (1B to bus width), dynamic payload arrays `data[]`, `strb[]`, `resp[]`.
+     - Includes standard constraints for 4KB boundary compliance and word alignment.
+
+  2. `axi_driver.sv`:
+     - In Active Master Mode: Drives AW and W channels concurrently, waits for B
+       response; drives AR channel and accepts incoming R data beats.
+     - In Active Slave Mode: Acts as a reactive slave memory. Listens for AW/W beats,
+       stores data into an internal associative array `bit [7:0] mem[addr]`, returns
+       BVALID/BRESP, and services incoming AR requests by fetching data from `mem[]`.
+
+  3. `axi_monitor.sv`:
+     - Passively samples AXI bus pins on `posedge clk`.
+     - Reconstructs complete write and read burst transactions upon handshake completion.
+     - Broadcasts sampled `axi_seq_item` via `uvm_analysis_port` to the Scoreboard
+       and Functional Coverage collector.
+
+  4. `axi_sequencer.sv`:
+     - Standard `uvm_sequencer #(axi_seq_item)` handling item arbitration.
+
+  5. `axi_agent_config.sv`:
+     - Holds `uvm_active_passive_enum is_active` (UVM_ACTIVE vs UVM_PASSIVE).
+     - Holds boolean `is_master` (1 = Master Driver, 0 = Reactive Slave Memory).
+     - Contains virtual interface handle `virtual axi_if vif`.
+
+  6. `axi_agent.sv`:
+     - Standard UVM agent. In `build_phase()`, instantiates Monitor; if active,
+       also instantiates Driver and Sequencer.
+     - In `connect_phase()`, hooks driver port to sequencer export and passes `vif`.
+
+  7. `axi_coverage.sv`:
+     - Subscribes to Monitor analysis port. Tracks burst length bins, burst type bins,
+       narrow transfer byte strobes, address range coverage, and error response codes.
+
+  8. `axi_mm_pkg.sv`:
+     - Includes all AXI-MM class files in dependency order inside `package axi_mm_pkg`.
+
+
+--------------------------------------------------------------------------------
+B. axis_vip (Generic AXI4-Stream UVC)
+--------------------------------------------------------------------------------
+* Design Philosophy:
+  A single, generic AXI4-Stream agent that can be instantiated twice in the top
+  environment:
+    - Instance 1 (`axis_wr_agent`): Configured as MASTER to feed stream data into DMA.
+    - Instance 2 (`axis_rd_agent`): Configured as SLAVE to receive stream data from DMA.
+
+* Files & Responsibilities:
+  1. `axis_seq_item.sv`:
+     - Represents a complete packet or frame of stream data.
+     - Holds dynamic arrays `data[]` (TDATA) and `keep[]` (TKEEP), packet length,
+       `tlast`, `tid`, `tdest`, and `tuser`.
+
+  2. `axis_driver.sv`:
+     - In Master Mode: Drives TVALID, TDATA, TKEEP, TLAST, TID, TDEST, TUSER and
+       waits for TREADY handshakes. Supports inter-beat delay insertion.
+     - In Slave Mode: Drives TREADY high or inserts programmable ready-latency
+       (backpressure throttle modeling) to stress the DUT.
+
+  3. `axis_monitor.sv`:
+     - Detects valid transfer beats `(clk && tvalid && tready)`.
+     - Collects data until `tlast == 1` signals end-of-packet, then writes the
+       assembled packet to its analysis port.
+
+  4. `axis_sequencer.sv`:
+     - Standard `uvm_sequencer #(axis_seq_item)`.
+
+  5. `axis_agent_config.sv`:
+     - Configures `is_active` and `is_master` (1 = Master generator, 0 = Slave consumer).
+     - Contains `virtual axis_if vif`.
+
+  6. `axis_agent.sv`:
+     - Standard agent structure encapsulating Driver, Monitor, and Sequencer.
+
+  7. `axis_pkg.sv`:
+     - SystemVerilog package bundling all AXI-Stream UVC components.
+
+
+--------------------------------------------------------------------------------
+C. dma_desc_vip (DMA Command/Status Descriptor UVC)
+--------------------------------------------------------------------------------
+* Design Philosophy:
+  Handles the DMA descriptor handshaking protocol. Instantiated twice:
+    - Instance 1 (`dma_rd_desc_agent`): Manages Read Descriptor Channel.
+    - Instance 2 (`dma_wr_desc_agent`): Manages Write Descriptor Channel.
+
+* Files & Responsibilities:
+  1. `desc_seq_item.sv`:
+     - Holds descriptor fields: `addr`, `len`, `tag`, `id`, `dest`, `user`.
+     - Holds status feedback fields: `status_len`, `status_tag`, `status_id`,
+       `status_dest`, `status_user`, `status_error` (0=OK, SLVERR, DECERR).
+
+  2. `desc_driver.sv`:
+     - Asserts descriptor command `valid`, places descriptor fields on the bus,
+       and waits for `ready` handshake from the DMA.
+     - Also controls DMA global enable (`read_enable`/`write_enable`) and `write_abort`.
+
+  3. `desc_monitor.sv`:
+     - Observes dispatched descriptor commands on `valid && ready`.
+     - Observes descriptor completion feedback on `status_valid`.
+     - Publishes transaction objects containing both dispatched command and execution status.
+
+  4. `desc_sequencer.sv`:
+     - Standard `uvm_sequencer #(desc_seq_item)`.
+
+  5. `desc_agent_config.sv`:
+     - Configures `is_read_channel` (1 = Read Descriptor, 0 = Write Descriptor).
+     - Contains `virtual dma_desc_if vif`.
+
+  6. `desc_agent.sv`:
+     - Standard agent structure encapsulating Driver, Monitor, and Sequencer.
+
+  7. `dma_desc_pkg.sv`:
+     - Package bundling all DMA Descriptor UVC classes.
+
+
+================================================================================
+3. TOP-LEVEL ENVIRONMENT (env/) ARCHITECTURE
+================================================================================
+
+--------------------------------------------------------------------------------
+1. `axi_env_config.sv` (Central Environment Configuration Object)
+--------------------------------------------------------------------------------
+* Holds the configuration sub-objects for all 5 agents:
+  - `axi_agent_config       axi_cfg;`
+  - `desc_agent_config      dma_rd_desc_cfg;`
+  - `desc_agent_config      dma_wr_desc_cfg;`
+  - `axis_agent_config      axis_wr_cfg;`
+  - `axis_agent_config      axis_rd_cfg;`
+
+* Contains topology mode selector:
+  - `typedef enum {RAM_STANDALONE, DMA_STANDALONE, SUBSYSTEM_LOOPBACK} verif_mode_e;`
+  - Helper functions to automatically configure all 5 agent active/passive/master/slave
+    roles based on the active verification mode.
+
+--------------------------------------------------------------------------------
+2. `axi_virtual_sequencer.sv` (Central Virtual Sequencer)
+--------------------------------------------------------------------------------
+* Contains sequencer handles to all 5 agent sequencers:
+  - `desc_sequencer         dma_rd_desc_seqr;`
+  - `desc_sequencer         dma_wr_desc_seqr;`
+  - `axis_sequencer         axis_wr_seqr;`
+  - `axis_sequencer         axis_rd_seqr;`
+  - `axi_sequencer          axi_mm_seqr;`
+
+--------------------------------------------------------------------------------
+3. `axi_scoreboard.sv` (End-to-End Scoreboard)
+--------------------------------------------------------------------------------
+* Declares `uvm_analysis_imp` exports connected to all 5 agent monitors.
+* Operates in 3 verification modes:
+  - In RAM Mode      : Verifies AXI Read Data matches earlier AXI Write Data at corresponding addresses.
+  - In DMA Mode      : Verifies Stream-in data matches AXI Write bursts, and AXI Read data matches Stream-out data.
+  - In Subsystem Mode: Verifies Stream-in packet matches Stream-out packet after full DMA->RAM->DMA loopback.
+
+--------------------------------------------------------------------------------
+4. `axi_env.sv` (Top Environment Component)
+--------------------------------------------------------------------------------
+* Instantiates:
+  - `dma_rd_desc_agent      m_dma_rd_desc_agent;`
+  - `dma_wr_desc_agent      m_dma_wr_desc_agent;`
+  - `axis_agent             m_axis_wr_agent;`
+  - `axis_agent             m_axis_rd_agent;`
+  - `axi_agent              m_axi_mm_agent;`
+  - `axi_virtual_sequencer  m_vseqr;`
+  - `axi_scoreboard         m_scoreboard;`
+* In `connect_phase()`:
+  - Connects virtual sequencer sub-handles to agent sequencers.
+  - Connects monitor analysis ports to scoreboard analysis imports.
+
+--------------------------------------------------------------------------------
+5. `axi_env_pkg.sv` (Environment Package)
+--------------------------------------------------------------------------------
+* Imports `axi_mm_pkg::*`, `axis_pkg::*`, `dma_desc_pkg::*`.
+* Includes `axi_env_config.sv`, `axi_virtual_sequencer.sv`, `axi_scoreboard.sv`, `axi_env.sv`.
+
+
+================================================================================
+4. PACKAGE COMPILATION ORDER (FOR CADENCE XCELIUM filelist.f)
+================================================================================
+
+To ensure clean, error-free compilation in Cadence Xcelium (`xrun`), files must
+be compiled in strict dependency order:
+
+1. Interfaces:
+   - `uvm/interfaces/axi_if.sv`
+   - `uvm/interfaces/axis_if.sv`
+   - `uvm/interfaces/dma_desc_if.sv`
+
+2. Protocol Packages:
+   - `uvm/vip/axi_mm_vip/axi_mm_pkg.sv`
+   - `uvm/vip/axis_vip/axis_pkg.sv`
+   - `uvm/vip/dma_desc_vip/dma_desc_pkg.sv`
+
+3. Environment Package:
+   - `uvm/env/axi_env_pkg.sv`
+
+4. Top-Level Module:
+   - `uvm/tb_top.sv`
+
+*(Sequences and Test Packages will be hooked into the flow in subsequent stages).*
+================================================================================
