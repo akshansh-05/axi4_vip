@@ -1,5 +1,5 @@
 // File: axi_env.sv
-// Top verification environment instantiating the AXI-MM Agent.
+// Top verification environment instantiating the AXI-MM Agent and Coverage Model.
 
 `ifndef AXI_ENV_SV
 `define AXI_ENV_SV
@@ -11,9 +11,11 @@ class axi_env #(
     parameter STRB_WIDTH = (DATA_WIDTH / 8)
 ) extends uvm_env;
 
-    typedef axi_agent #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) agent_type;
+    typedef axi_agent    #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) agent_type;
+    typedef axi_coverage #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) cov_type;
 
-    agent_type axi_agent;
+    agent_type   axi_agent;
+    cov_type     cov;
 
     `uvm_component_param_utils(axi_env #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
 
@@ -24,7 +26,14 @@ class axi_env #(
     virtual function void build_phase(uvm_phase phase);
         super.build_phase(phase);
         axi_agent = agent_type::type_id::create("axi_agent", this);
+        cov       = cov_type::type_id::create("cov", this);
     endfunction : build_phase
+
+    virtual function void connect_phase(uvm_phase phase);
+        super.connect_phase(phase);
+        // Connect Monitor analysis port to Coverage Subscriber
+        axi_agent.mon.ap.connect(cov.analysis_export);
+    endfunction : connect_phase
 
 endclass : axi_env
 

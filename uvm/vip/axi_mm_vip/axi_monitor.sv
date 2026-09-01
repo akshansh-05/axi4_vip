@@ -35,7 +35,7 @@ class axi_monitor #(
         vif = cfg.vif;
     endfunction : build_phase
 
-/*    virtual task run_phase(uvm_phase phase);
+    virtual task run_phase(uvm_phase phase);
         wait(!vif.rst);
         @(posedge vif.clk);
 
@@ -84,7 +84,7 @@ class axi_monitor #(
             write_item.bid   = vif.bid;
             write_item.bresp = vif.bresp;
 
-            // Broadcast completed write transaction to scoreboard
+            // Broadcast completed write transaction to scoreboard & coverage
             ap.write(write_item);
         end
     endtask : monitor_write_channel
@@ -122,10 +122,10 @@ class axi_monitor #(
                 read_item.rid[i]   = vif.rid;
             end
 
-            // Broadcast completed read transaction to scoreboard
+            // Broadcast completed read transaction to scoreboard & coverage
             ap.write(read_item);
         end
-    endtask : monitor_read_channel */
+    endtask : monitor_read_channel
 
 endclass : axi_monitor
 
