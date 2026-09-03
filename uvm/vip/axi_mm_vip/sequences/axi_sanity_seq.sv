@@ -1,5 +1,6 @@
 // File: axi_sanity_seq.sv
-// Sanity sequence using inline randomized constraints for write and read burst transactions.
+// Sanity sequence for AXI4 Memory-Mapped bus.
+// Sends a 4-beat Write burst followed by a 4-beat Read burst to address 0x1000.
 
 `ifndef AXI_SANITY_SEQ_SV
 `define AXI_SANITY_SEQ_SV
@@ -25,7 +26,7 @@ class axi_sanity_seq #(
 
         `uvm_info("SANITY_SEQ", "Starting AXI Sanity Sequence: 4-Beat Write followed by 4-Beat Read", UVM_LOW)
 
-        // 1. Randomized 4-Beat Write Burst to Address 0x1000
+        // 1. Send 4-Beat Write Burst to Address 0x1000
         wr_item = item_type::type_id::create("wr_item");
         start_item(wr_item);
         if (!wr_item.randomize() with {
@@ -42,9 +43,11 @@ class axi_sanity_seq #(
         }) begin
             `uvm_fatal("SANITY_SEQ", "Randomization failed for wr_item")
         end
+        `uvm_info("SANITY_SEQ", "Generated Write Transaction:", UVM_MEDIUM)
+        wr_item.print();
         finish_item(wr_item);
 
-        // 2. Randomized 4-Beat Read Burst from Address 0x1000
+        // 2. Send 4-Beat Read Burst from Address 0x1000
         rd_item = item_type::type_id::create("rd_item");
         start_item(rd_item);
         if (!rd_item.randomize() with {
@@ -58,6 +61,8 @@ class axi_sanity_seq #(
         }) begin
             `uvm_fatal("SANITY_SEQ", "Randomization failed for rd_item")
         end
+        `uvm_info("SANITY_SEQ", "Generated Read Transaction:", UVM_MEDIUM)
+        rd_item.print();
         finish_item(rd_item);
 
         `uvm_info("SANITY_SEQ", "AXI Sanity Sequence Completed Successfully", UVM_LOW)

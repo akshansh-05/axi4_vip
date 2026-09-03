@@ -55,7 +55,23 @@ class axi_seq_item #(
     bit [ID_WIDTH-1:0]            rid[];       // Read response ID per beat
     bit [1:0]                     rresp[];     // Read response status per beat
 
-    `uvm_object_param_utils(axi_seq_item #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
+    // UVM Field Macros for automatic print(), copy(), compare(), and record()
+    `uvm_object_param_utils_begin(axi_seq_item #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
+        `uvm_field_enum     (axi_trans_type_e, trans_type, UVM_ALL_ON)
+        `uvm_field_int      (id,                           UVM_ALL_ON)
+        `uvm_field_int      (addr,                         UVM_ALL_ON | UVM_HEX)
+        `uvm_field_int      (len,                          UVM_ALL_ON | UVM_DEC)
+        `uvm_field_int      (size,                         UVM_ALL_ON | UVM_DEC)
+        `uvm_field_enum     (axi_burst_type_e, burst,      UVM_ALL_ON)
+        `uvm_field_array_int(data,                         UVM_ALL_ON | UVM_HEX)
+        `uvm_field_array_int(strb,                         UVM_ALL_ON | UVM_BIN)
+        `uvm_field_int      (addr_delay,                   UVM_ALL_ON | UVM_DEC)
+        `uvm_field_array_int(data_delay,                   UVM_ALL_ON | UVM_DEC)
+        `uvm_field_int      (bid,                          UVM_ALL_ON)
+        `uvm_field_int      (bresp,                        UVM_ALL_ON | UVM_BIN)
+        `uvm_field_array_int(rid,                          UVM_ALL_ON)
+        `uvm_field_array_int(rresp,                        UVM_ALL_ON | UVM_BIN)
+    `uvm_object_utils_end
 
     // Sizing constraints: arrays must match burst beat count
     constraint c_array_sizes {
@@ -66,34 +82,34 @@ class axi_seq_item #(
 
     // Beat size cannot exceed the physical bus width
     constraint c_size_limit {
-        size == $clog2(STRB_WIDTH);
+        size == $clog2(STRB_WIDTH); // size = 4 bytes 
     }
 
     // AXI 4KB boundary constraint: INCR bursts must not cross a 4KB boundary
     constraint c_4kb_boundary {
-        if (burst == AXI_BURST_INCR) begin
+        if (burst == AXI_BURST_INCR) {
             (addr % 4096) + ((len + 1) * (1 << size)) <= 4096;
-        end
+        }
     }
 
     // WRAP burst constraints: length must be 2, 4, 8, or 16 and address aligned
     constraint c_wrap_rules {
-        if (burst == AXI_BURST_WRAP) begin
+        if (burst == AXI_BURST_WRAP) {
             len inside {8'd1, 8'd3, 8'd7, 8'd15};
             addr % (1 << size) == 0;
-        end
+        }
     }
 
     // Default distributions for verification
     constraint c_default_burst_distribution {
         soft len inside {[8'd0 : 8'd15]};
         soft addr_delay inside {[0 : 3]};
-        foreach (data_delay[i]) begin
+        foreach (data_delay[i]) {
             soft data_delay[i] inside {[0 : 3]};
-        end
-        foreach (strb[i]) begin
+        }
+        foreach (strb[i]) {
             soft strb[i] == {STRB_WIDTH{1'b1}};
-        end
+        }
     }
 
     function new(string name = "axi_seq_item");

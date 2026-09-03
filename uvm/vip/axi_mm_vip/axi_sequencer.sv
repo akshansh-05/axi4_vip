@@ -20,3 +20,4 @@ class axi_sequencer #(
 endclass : axi_sequencer
 
 `endif // AXI_SEQUENCER_SV
+

@@ -1,0 +1,205 @@
+===============================================================================
+VERIFICATION PLAN (vPlan): AXI4 MEMORY-MAPPED RAM & DMA SUBSYSTEM
+===============================================================================
+Document Version : 1.0
+Project          : Advanced UVM Verification of AXI4 DMA-SRAM Subsystem
+Scope            : Part 1 - AXI-RAM Functional Coverage & Verification Baseline
+Author           : Akshansh Chaurasia
+===============================================================================
+
+-------------------------------------------------------------------------------
+1. EXECUTIVE SUMMARY & VERIFICATION STRATEGY
+-------------------------------------------------------------------------------
+The primary objective of this verification plan is to achieve 100% functional 
+coverage and zero data corruption across all valid, corner-case, and boundary 
+AXI4 Memory-Mapped transactions on the static RAM slave (axi_ram.v).
+
+This document details the exact mapping between:
+1. RTL Micro-Architecture & Silicon Mechanisms inside axi_ram.v.
+2. Covergroups & Bins implemented in uvm/env/axi_coverage.sv.
+3. Escaped Bug / Failure Mode Analysis (what catastrophic hardware bug is 
+   prevented by hitting each bin).
+4. Stimulus Scenarios & Checking Criteria.
+
+-------------------------------------------------------------------------------
+2. AXI-RAM FUNCTIONAL COVERAGE MODEL ARCHITECTURE
+-------------------------------------------------------------------------------
++-----------------------------------------------------------------------------+
+|                          axi_coverage Subscriber                            |
++-----------------------------------------------------------------------------+
+|  cg_axi_write (AW, W, B Channels)       |  cg_axi_read (AR, R Channels)     |
+|  ---------------------------------------+---------------------------------- |
+|  1. cp_awlen      (1, 2-16, 17-64, 256) |  1. cp_arlen      (1, 2-16, 17-64,|
+|  2. cp_awsize     (1B, 2B, 4B)          |                    256)           |
+|  3. cp_awburst    (FIXED, INCR, WRAP)   |  2. cp_arsize     (1B, 2B, 4B)    |
+|  4. cp_awaddr_align (+0, +1, +2, +3)    |  3. cp_arburst    (FIXED, INCR,   |
+|  5. cp_awaddr_range (Low, Mid, High)    |                    WRAP)          |
+|  6. cp_wstrb      (16 Strobe combos)    |  4. cp_araddr_align (+0, +1, +2,  |
+|  7. cp_awid       (0, Low, Mid, High)   |                    +3)            |
+|  8. cp_bresp      (OKAY, EXOKAY, ERR)   |  5. cp_araddr_range (Low, Mid,    |
+|  ---------------------------------------|                    High)          |
+|  4 Multi-Dimensional Cross Coverages    |  6. cp_arid       (0, Low, Mid,   |
+|  - cross_awlen_awsize                   |                    High)          |
+|  - cross_awlen_awburst                  |  7. cp_rresp      (OKAY, EXOKAY,  |
+|  - cross_awlen_wstrb                    |                    ERR)           |
+|  - cross_awlen_awalign                  |  ---------------------------------|
+|                                         |  4 Multi-Dimensional Crosses      |
+|                                         |  - cross_arlen_arsize             |
+|                                         |  - cross_arlen_arburst            |
+|                                         |  - cross_arsize_arburst           |
+|                                         |  - cross_arlen_aralign            |
++-----------------------------------------------------------------------------+
+
+-------------------------------------------------------------------------------
+3. DETAILED COVERPOINT & BIN ANALYSIS (THE "WHY EVERY BIN MATTERS" MATRIX)
+-------------------------------------------------------------------------------
+
+3.1 WRITE & READ BURST LENGTH (cp_awlen / cp_arlen)
+RTL Target: Internal hardware counter 'burst_cnt[7:0]' & comparator 'burst_cnt == burst_len_reg'.
+
++---------------+-------------+-------------------------------+-----------------------------------------+
+| Bin Name      | Value Range | Hardware Mechanism Stimulated | Bug Prevented / Silicon Failure Mode    |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| single_beat   | 0 (1 beat)  | 1-cycle single transfer.      | FSM Pipeline Stall: Slave FSM hangs     |
+|               |             | burst_cnt == 0 on 1st cycle.  | waiting for 2nd beat before responding. |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| short_burst   | [1:15]      | Standard burst counter steps  | Off-by-One Counter: Counter stops at    |
+|               | (2-16 beats)| and 4-bit boundary rollover.  | N-1 or N+1; corrupts CPU cache lines.   |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| med_burst     | [16:63]     | 5th and 6th counter bits      | Bit-Drop Bug: RTL counter declared as   |
+|               | (17-64 beats| (burst_cnt[5:4]).             | 4-bit; transfers >16 beats truncate.    |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| long_burst    | [64:254]    | High-throughput continuous    | FIFO Underflow/Overflow: Stresses array |
+|               | (65-255 b)  | memory write streaming.       | writes without pipeline bubbles.        |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| max_burst     | 255 (256 b) | Maximum 8-bit limit (8'hFF).  | Counter Rollover Lockup: burst_cnt+1    |
+|               |             |                               | overflows 255->0, causing INFINITE LOOP |
++---------------+-------------+-------------------------------+-----------------------------------------+
+
+3.2 TRANSFER SIZE PER BEAT (cp_awsize / cp_arsize)
+RTL Target: Address increment adder step 'addr <= addr + (1 << size)'.
+
++---------------+-------------+-------------------------------+-----------------------------------------+
+| Bin Name      | Value Range | Hardware Mechanism Stimulated | Bug Prevented / Silicon Failure Mode    |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| size_1B       | 3'b000 (1B) | 8-bit narrow transfer adder.  | Wrong Address Step: Adder calculates    |
+|               |             |                               | addr+4 instead of addr+1; corrupts RAM. |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| size_2B       | 3'b001 (2B) | 16-bit half-word adder.       | Half-Word Offset Error: Adder jumps +4  |
+|               |             |                               | instead of +2; audio/sensor data fails. |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| size_4B       | 3'b010 (4B) | Full 32-bit bus width.        | Baseline 32-bit word access failure.    |
++---------------+-------------+-------------------------------+-----------------------------------------+
+
+3.3 BURST TYPE (cp_awburst / cp_arburst)
+RTL Target: Addressing FSM state machine for FIXED, INCR, and WRAP modes.
+
++---------------+-------------+-------------------------------+-----------------------------------------+
+| Bin Name      | Value Range | Hardware Mechanism Stimulated | Bug Prevented / Silicon Failure Mode    |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| burst_fixed   | 2'b00       | Address stays constant across | Address Drift Bug: Hardware increments  |
+|               | (FIXED)     | all burst beats.              | address, overwriting FIFO registers.    |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| burst_incr    | 2'b01       | Sequential memory stepping.   | Missing Increment: Writes same address  |
+|               | (INCR)      |                               | repeatedly instead of filling an array. |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| burst_wrap    | 2'b10       | Address wraps at cache line   | Cache Line Runaway: Fails to wrap back  |
+|               | (WRAP)      | boundary.                     | and writes past boundary, corrupting CPU|
++---------------+-------------+-------------------------------+-----------------------------------------+
+| illegal_bins  | 2'b11       | Protocol violation guard.     | Undefined Hardware State: Hardware      |
+| rsvd          | (Reserved)  |                               | deadlocks upon receiving illegal code.  |
++---------------+-------------+-------------------------------+-----------------------------------------+
+
+3.4 ADDRESS ALIGNMENT (cp_awaddr_align / cp_araddr_align)
+RTL Target: Lower address bits 'addr[1:0]' decoding and initial beat offset calculation.
+
++---------------+-------------+-------------------------------+-----------------------------------------+
+| Bin Name      | Value Range | Hardware Mechanism Stimulated | Bug Prevented / Silicon Failure Mode    |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| aligned_word  | 2'b00       | Aligned word (0x0, 0x4, 0x8). | Standard word boundary baseline.        |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| unaligned_01  | 2'b01 (+1B) | Start address 0x1001, 0x1005. | Unaligned Start Bug: Aligns to 0x1000   |
+|               |             |                               | and drops byte 0, or calculates beat 2  |
+|               |             |                               | as 0x1002 instead of 0x1004.            |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| unaligned_10  | 2'b10 (+2B) | Start address 0x1002, 0x1006. | Half-word offset calculation error.     |
++---------------+-------------+-------------------------------+-----------------------------------------+
+| unaligned_11  | 2'b11 (+3B) | Start address 0x1003, 0x1007. | Worst-case unaligned byte offset bug.   |
++---------------+-------------+-------------------------------+-----------------------------------------+
+
+3.5 MEMORY ADDRESS RANGE (cp_awaddr_range / cp_araddr_range)
+RTL Target: Memory array index decoder 'mem[addr]'.
+
++---------------+-------------------+-------------------------------------------------------------------+
+| Bin Name      | Address Range     | Hardware Mechanism & Silicon Failure Mode                         |
++---------------+-------------------+-------------------------------------------------------------------+
+| low_mem       | 0x0000 : 0x0FFF   | Base address & reset vector page (First 4KB).                     |
+| mid_mem       | 0x1000 : 0xEFFF   | General RAM address space.                                        |
+| high_mem      | 0xF000 : 0xFFFF   | Top 4KB boundary of 64KB RAM. Prevents Address Rollover Bug       |
+|               |                   | (accessing 0xFFFF rolling over into 0x0000).                      |
++---------------+-------------------+-------------------------------------------------------------------+
+
+3.6 WRITE BYTE STROBES (cp_wstrb)
+RTL Target: Physical byte-enable write gates 'if (wstrb[i]) mem[addr+i] <= wdata'.
+Sampling   : Evaluated on EVERY individual beat across multi-beat bursts via current_strb.
+
++---------------+-----------------------------------+---------------------------------------------------+
+| Bin Name      | Strobe Patterns                   | Bug Prevented / Silicon Failure Mode              |
++---------------+-----------------------------------+---------------------------------------------------+
+| full_word     | 4'b1111                           | Full 32-bit write operation.                      |
+| three_bytes   | 4'b0111, 4'b1110, 4'b1101, 4'b1011| Byte Gate Coupling: Byte 3 enable tied to Byte 2; |
+|               |                                   | overwrites neighboring struct fields.             |
+| two_bytes     | 4'b0011, 4'b1100, 4'b0110,        | Half-Word Isolation: Writing variable 'a'        |
+|               | 4'b1001, 4'b0101, 4'b1010         | accidentally overwrites adjacent variable 'b'.    |
+| single_bytes  | 4'b0001, 4'b0010, 4'b0100, 4'b1000| Single Byte (8-bit) Isolation: Setting 1 boolean  |
+|               |                                   | flag corrupts remaining 3 bytes in memory word.   |
+| illegal_bins  | 4'b0000                           | Flags unexpected zero-byte write transfers.       |
+| no_write      |                                   |                                                   |
++---------------+-----------------------------------+---------------------------------------------------+
+
+3.7 ID TAGS & RESPONSE STATUS (cp_awid, cp_arid, cp_bresp, cp_rresp)
+RTL Target: Response routing registers (bid, rid, bresp, rresp).
+
++---------------------------+-----------------------+---------------------------------------------------+
+| Coverpoint                | Bins                  | Bug Prevented / Silicon Failure Mode              |
++---------------------------+-----------------------+---------------------------------------------------+
+| cp_awid / cp_arid         | id_zero, id_low,      | ID Tag Corruption: Slave returns wrong ID tag,    |
+|                           | id_mid, id_high       | causing master to misroute transaction response.  |
+| cp_bresp / cp_rresp       | okay, exokay,         | Status Code Glitch: Slave returns undefined       |
+|                           | slverr, decerr        | status codes causing master interconnect crashes. |
++---------------------------+-----------------------+---------------------------------------------------+
+
+-------------------------------------------------------------------------------
+4. MULTI-DIMENSIONAL CROSS-COVERAGE MATRIX
+-------------------------------------------------------------------------------
+1. cross_awlen_awsize / cross_arlen_arsize:
+   Stresses long bursts of narrow transfers (e.g. 256 beats of 1-Byte transfers).
+2. cross_awlen_awburst / cross_arlen_arburst:
+   Stresses long INCR bursts (256 beats) vs wrapping bursts (16 beats).
+3. cross_awlen_wstrb:
+   Stresses multi-beat bursts where byte strobes change dynamically per beat.
+4. cross_awlen_awalign / cross_arlen_aralign:
+   Stresses multi-beat bursts starting at unaligned byte offsets (+1, +2, +3).
+
+-------------------------------------------------------------------------------
+5. TEST MATRIX & VERIFICATION MILESTONES
+-------------------------------------------------------------------------------
++---------------------------+-----------------------------------+--------------------+------------------+
+| Test Name                 | Stimulus Sequence                 | Scoreboard Check   | Coverage Target  |
++---------------------------+-----------------------------------+--------------------+------------------+
+| axi_sanity_test           | 4-beat aligned Write -> Read      | Exact byte match.  | Connectivity.    |
+| axi_burst_len_test        | Sweep len across 1, 2..256 beats  | All burst lengths. | 100% cp_aw/arlen |
+| axi_narrow_size_test      | 1B and 2B transfers with +1, +2   | +1 and +2 steps.   | 100% cp_aw/arsize|
+| axi_unaligned_addr_test   | Bursts starting at +1, +2, +3     | Unaligned layout.  | 100% cp_align    |
+| axi_strobe_sweep_test     | Random 1B, 2B, 3B, 4B strobes     | Strobe byte gates. | 100% cp_wstrb    |
+| axi_wrap_burst_test       | 2, 4, 8, 16 beat WRAP bursts      | Wrap-around math.  | 100% cp_wrap     |
+| axi_random_stress_test    | 1000 randomized transactions      | Associative check. | 100% Sign-Off    |
++---------------------------+-----------------------------------+--------------------+------------------+
+
+-------------------------------------------------------------------------------
+6. SIGN-OFF CRITERIA
+-------------------------------------------------------------------------------
+1. Zero UVM Errors / Fatal Warnings across all test suites.
+2. 100% Functional Coverage in cg_axi_write and cg_axi_read (including all crosses).
+3. 100% Code Coverage (Line, Condition, FSM State, Branch, Toggle on axi_ram.v).
+===============================================================================

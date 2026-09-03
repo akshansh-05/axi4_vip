@@ -11,16 +11,16 @@ class axi_agent_config #(
     parameter STRB_WIDTH = (DATA_WIDTH / 8)
 ) extends uvm_object;
 
-// Active (Driver + Monitor) or Passive (Monitor only)
-uvm_active_passive_enum is_active = UVM_ACTIVE;
+    // Active (Driver + Monitor) or Passive (Monitor only)
+    uvm_active_passive_enum is_active = UVM_ACTIVE;
 
-// Master mode (drives AW/W/AR) vs Slave mode (responds with B/R)
-bit is_master = 1'b1;
+    // Master mode (drives AW/W/AR) vs Slave mode (responds with B/R)
+    bit is_master = 1'b1;
 
-// Instantiate the Virtual interface handle
-virtual axi_if #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) vif;
+    // Instantiate the Virtual interface handle
+    virtual axi_if #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) vif;
 
-    `uvm_object_param_utils(axi_agent_config #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
+`uvm_object_param_utils(axi_agent_config #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
 
 function new(string name = "axi_agent_config");
    super.new(name);

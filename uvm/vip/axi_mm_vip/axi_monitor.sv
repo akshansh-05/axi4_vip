@@ -1,7 +1,7 @@
 // File: axi_monitor.sv
 // UVM Monitor for AXI4 Memory-Mapped bus.
-// Passively snoops AW, W, B, AR, and R channels, reconstructs complete burst transactions,
-// and broadcasts them via analysis port to scoreboards and coverage collectors.
+// Passively snoops AW, W, B, AR, and R channels strictly through mon_cb clocking block,
+// reconstructs complete burst transactions, prints summary to console, and broadcasts them via analysis port.
 
 `ifndef AXI_MONITOR_SV
 `define AXI_MONITOR_SV
@@ -37,7 +37,7 @@ class axi_monitor #(
 
     virtual task run_phase(uvm_phase phase);
         wait(!vif.rst);
-        @(posedge vif.clk);
+        @(vif.mon_cb);
 
         fork
             monitor_write_channel();
@@ -45,7 +45,7 @@ class axi_monitor #(
         join
     endtask : run_phase
 
-    // Observes Write Address (AW), Write Data (W), and Write Response (B)
+    // Observes Write Address (AW), Write Data (W), and Write Response (B) strictly through mon_cb
     virtual task monitor_write_channel();
         forever begin
             item_type write_item;
@@ -54,14 +54,14 @@ class axi_monitor #(
 
             // 1. Capture Write Address Phase (AW)
             do begin
-                @(posedge vif.clk);
-            end while (!(vif.awvalid && vif.awready));
+                @(vif.mon_cb);
+            end while (!(vif.mon_cb.awvalid && vif.mon_cb.awready));
 
-            write_item.id    = vif.awid;
-            write_item.addr  = vif.awaddr;
-            write_item.len   = vif.awlen;
-            write_item.size  = vif.awsize;
-            write_item.burst = axi_burst_type_e'(vif.awburst);
+            write_item.id    = vif.mon_cb.awid;
+            write_item.addr  = vif.mon_cb.awaddr;
+            write_item.len   = vif.mon_cb.awlen;
+            write_item.size  = vif.mon_cb.awsize;
+            write_item.burst = axi_burst_type_e'(vif.mon_cb.awburst);
 
             write_item.data = new[write_item.len + 1];
             write_item.strb = new[write_item.len + 1];
@@ -69,27 +69,30 @@ class axi_monitor #(
             // 2. Capture Write Data Phase (W) beats
             for (int i = 0; i <= write_item.len; i++) begin
                 do begin
-                    @(posedge vif.clk);
-                end while (!(vif.wvalid && vif.wready));
+                    @(vif.mon_cb);
+                end while (!(vif.mon_cb.wvalid && vif.mon_cb.wready));
 
-                write_item.data[i] = vif.wdata;
-                write_item.strb[i] = vif.wstrb;
+                write_item.data[i] = vif.mon_cb.wdata;
+                write_item.strb[i] = vif.mon_cb.wstrb;
             end
 
             // 3. Capture Write Response Phase (B)
             do begin
-                @(posedge vif.clk);
-            end while (!(vif.bvalid && vif.bready));
+                @(vif.mon_cb);
+            end while (!(vif.mon_cb.bvalid && vif.mon_cb.bready));
 
-            write_item.bid   = vif.bid;
-            write_item.bresp = vif.bresp;
+            write_item.bid   = vif.mon_cb.bid;
+            write_item.bresp = vif.mon_cb.bresp;
 
-            // Broadcast completed write transaction to scoreboard & coverage
+            `uvm_info("AXI_MON_WR", $sformatf("Captured WRITE Burst: addr=0x%04h, len=%0d (%0d beats), size=%0d, burst=%s, bresp=2'b%0b",
+                      write_item.addr, write_item.len, write_item.len + 1, write_item.size, write_item.burst.name(), write_item.bresp), UVM_MEDIUM)
+
+            // Broadcast completed write transaction to subscribers
             ap.write(write_item);
         end
     endtask : monitor_write_channel
 
-    // Observes Read Address (AR) and Read Data (R)
+    // Observes Read Address (AR) and Read Data (R) strictly through mon_cb
     virtual task monitor_read_channel();
         forever begin
             item_type read_item;
@@ -98,14 +101,14 @@ class axi_monitor #(
 
             // 1. Capture Read Address Phase (AR)
             do begin
-                @(posedge vif.clk);
-            end while (!(vif.arvalid && vif.arready));
+                @(vif.mon_cb);
+            end while (!(vif.mon_cb.arvalid && vif.mon_cb.arready));
 
-            read_item.id    = vif.arid;
-            read_item.addr  = vif.araddr;
-            read_item.len   = vif.arlen;
-            read_item.size  = vif.arsize;
-            read_item.burst = axi_burst_type_e'(vif.arburst);
+            read_item.id    = vif.mon_cb.arid;
+            read_item.addr  = vif.mon_cb.araddr;
+            read_item.len   = vif.mon_cb.arlen;
+            read_item.size  = vif.mon_cb.arsize;
+            read_item.burst = axi_burst_type_e'(vif.mon_cb.arburst);
 
             read_item.data  = new[read_item.len + 1];
             read_item.rresp = new[read_item.len + 1];
@@ -114,15 +117,18 @@ class axi_monitor #(
             // 2. Capture Read Data Phase (R) beats
             for (int i = 0; i <= read_item.len; i++) begin
                 do begin
-                    @(posedge vif.clk);
-                end while (!(vif.rvalid && vif.rready));
+                    @(vif.mon_cb);
+                end while (!(vif.mon_cb.rvalid && vif.mon_cb.rready));
 
-                read_item.data[i]  = vif.rdata;
-                read_item.rresp[i] = vif.rresp;
-                read_item.rid[i]   = vif.rid;
+                read_item.data[i]  = vif.mon_cb.rdata;
+                read_item.rresp[i] = vif.mon_cb.rresp;
+                read_item.rid[i]   = vif.mon_cb.rid;
             end
 
-            // Broadcast completed read transaction to scoreboard & coverage
+            `uvm_info("AXI_MON_RD", $sformatf("Captured READ Burst: addr=0x%04h, len=%0d (%0d beats), size=%0d, burst=%s, rdata[0]=0x%08h",
+                      read_item.addr, read_item.len, read_item.len + 1, read_item.size, read_item.burst.name(), read_item.data[0]), UVM_MEDIUM)
+
+            // Broadcast completed read transaction to subscribers
             ap.write(read_item);
         end
     endtask : monitor_read_channel
