@@ -98,8 +98,8 @@ cov_ram: setup
 report_cov:
 	@echo "[IMC] Generating HTML Coverage Report..."
 	@mkdir -p cov_html_report
-	imc -batch -execute "load -run cov_work/scope/$(TEST); report -html -out cov_html_report -detail -metrics functional; exit" || \
-	imc -batch -execute "load -run ./cov_work/scope/$(TEST); report -html -out cov_html_report -all; exit"
+	imc -load cov_work/scope/$(TEST) -batch -execcmd "report -html -out cov_html_report -detail -metrics functional" || \
+	imc -load ./cov_work/scope/$(TEST) -batch -execcmd "report -html -out cov_html_report -all"
 	@echo ">>> Coverage HTML Report generated at: cov_html_report/index.html"
 
 # -------------------------------------------------------------------------------

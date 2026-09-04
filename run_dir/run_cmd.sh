@@ -81,8 +81,8 @@ generate_coverage_report() {
     mkdir -p cov_html_report
     echo "[INFO] Invoking Cadence IMC (Integrated Metrics Center) in batch mode..."
     
-    imc -batch -execute "load -run cov_work/scope/$target_test; report -html -out cov_html_report -detail -metrics functional; exit" || \
-    imc -batch -execute "load -run ./cov_work/scope/$target_test; report -html -out cov_html_report -all; exit"
+    imc -load cov_work/scope/$target_test -batch -execcmd "report -html -out cov_html_report -detail -metrics functional" || \
+    imc -load ./cov_work/scope/$target_test -batch -execcmd "report -html -out cov_html_report -all"
 
     echo ""
     echo "==============================================================================="
