@@ -78,10 +78,19 @@ generate_coverage_report() {
         exit 1
     fi
 
+    # Find matching IMC binary from active xrun path
+    local imc_bin="imc"
+    if command -v xrun &>/dev/null; then
+        local xrun_dir=$(dirname $(which xrun))
+        if [[ -f "$xrun_dir/imc" ]]; then
+            imc_bin="$xrun_dir/imc"
+        fi
+    fi
+
     mkdir -p cov_html_report
-    echo "[INFO] Invoking Cadence IMC (Integrated Metrics Center) in batch mode..."
+    echo "[INFO] Invoking Cadence IMC ($imc_bin)..."
     
-    imc -load cov_work/scope/$target_test -execcmd "\
+    $imc_bin -load cov_work/scope/$target_test -execcmd "\
         report -summary -out cov_report.txt -metrics all; \
         report -detail -out cov_detailed_report.txt -metrics all -all; \
         report -html -out cov_html_report -detail -metrics all"

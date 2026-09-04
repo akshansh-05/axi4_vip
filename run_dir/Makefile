@@ -94,11 +94,14 @@ cov_ram: setup
 	@echo "[XCELIUM] Running RAM Test with Coverage: $(TEST)"
 	$(XRUN_BASE) +define+RAM_STANDALONE -coverage all -covoverwrite -covworkdir ./cov_work -covtest $(TEST) -l $(LOG_DIR)/sim_ram_$(TEST)_cov.log
 
+# Derive matching IMC binary from active xrun installation path
+IMC := $(shell dirname $$(which xrun))/imc
+
 # Generate Text and HTML Coverage Reports using Cadence IMC
 report_cov:
-	@echo "[IMC] Generating Summary and Detailed Coverage Reports..."
+	@echo "[IMC] Generating Summary and Detailed Coverage Reports using $(IMC)..."
 	@mkdir -p cov_html_report
-	imc -load cov_work/scope/$(TEST) -execcmd "\
+	$(IMC) -load cov_work/scope/$(TEST) -execcmd "\
 	    report -summary -out cov_report.txt -metrics all; \
 	    report -detail -out cov_detailed_report.txt -metrics all -all; \
 	    report -html -out cov_html_report -detail -metrics all"
