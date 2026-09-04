@@ -98,7 +98,7 @@ cov_ram: setup
 report_cov:
 	@echo "[IMC] Generating Summary and Detailed Coverage Reports..."
 	@mkdir -p cov_html_report
-	imc -load cov_work/scope/$(TEST) -batch -execcmd "\
+	imc -load cov_work/scope/$(TEST) -execcmd "\
 	    report -summary -out cov_report.txt -metrics all; \
 	    report -detail -out cov_detailed_report.txt -metrics all -all; \
 	    report -html -out cov_html_report -detail -metrics all"
