@@ -11,11 +11,13 @@ class axi_env #(
     parameter STRB_WIDTH = (DATA_WIDTH / 8)
 ) extends uvm_env;
 
-    typedef axi_agent    #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) agent_type;
-    typedef axi_coverage #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) cov_type;
+    typedef axi_agent      #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) agent_type;
+    typedef axi_coverage   #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) cov_type;
+    // typedef axi_scoreboard #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) scb_type;
 
-    agent_type   axi_agent;
-    cov_type     cov;
+    agent_type axi_agent;
+    cov_type   cov;
+    // scb_type   scb;
 
     `uvm_component_param_utils(axi_env #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
 
@@ -27,12 +29,14 @@ class axi_env #(
         super.build_phase(phase);
         axi_agent = agent_type::type_id::create("axi_agent", this);
         cov       = cov_type::type_id::create("cov", this);
+        // scb       = scb_type::type_id::create("scb", this);
     endfunction : build_phase
 
     virtual function void connect_phase(uvm_phase phase);
         super.connect_phase(phase);
         // Connect Monitor analysis port to Coverage Subscriber
         axi_agent.mon.ap.connect(cov.analysis_export);
+        // axi_agent.mon.ap.connect(scb.analysis_export);
     endfunction : connect_phase
 
 endclass : axi_env

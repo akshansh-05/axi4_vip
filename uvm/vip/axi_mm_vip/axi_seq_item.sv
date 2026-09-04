@@ -75,10 +75,17 @@ class axi_seq_item #(
 
     // Sizing constraints: arrays must match burst beat count
     constraint c_array_sizes {
-        data.size()       == (len + 1);
-        strb.size()       == (len + 1);
-        data_delay.size() == (len + 1);
+        if (trans_type == AXI_WRITE) {
+            data.size()       == (len + 1);
+            strb.size()       == (len + 1);
+            data_delay.size() == (len + 1);
+        } else {
+            data.size()       == 0;
+            strb.size()       == 0;
+            data_delay.size() == 0;
+        }
     }
+
 
     // Beat size cannot exceed the physical bus width
     constraint c_size_limit {

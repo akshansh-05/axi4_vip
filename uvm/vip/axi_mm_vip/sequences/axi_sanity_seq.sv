@@ -49,6 +49,8 @@ class axi_sanity_seq #(
 
         // 2. Send 4-Beat Read Burst from Address 0x1000
         rd_item = item_type::type_id::create("rd_item");
+        rd_item.data.rand_mode(0);
+        rd_item.strb.rand_mode(0);
         start_item(rd_item);
         if (!rd_item.randomize() with {
             trans_type == AXI_READ;
@@ -66,7 +68,7 @@ class axi_sanity_seq #(
         finish_item(rd_item);
 
         `uvm_info("SANITY_SEQ", "AXI Sanity Sequence Completed Successfully", UVM_LOW)
-    endtask : body
+    endtask
 
 endclass : axi_sanity_seq
 

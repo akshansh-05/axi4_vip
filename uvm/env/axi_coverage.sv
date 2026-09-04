@@ -83,9 +83,7 @@ class axi_coverage #(
         // 8. Write Response Status (BRESP)
         cp_bresp: coverpoint txn.bresp {
             bins okay   = {2'b00};            // Normal access OKAY
-            bins exokay = {2'b01};            // Exclusive OKAY
-            bins slverr = {2'b10};            // Slave error
-            bins decerr = {2'b11};            // Decode error
+            ignore_bins unsupported = {2'b01,2'b10,2'b11};
         }
 
         // 9. Cross Coverage
@@ -150,9 +148,7 @@ class axi_coverage #(
         // 7. Read Response Status (RRESP beat 0)
         cp_rresp: coverpoint txn.rresp[0] {
             bins okay   = {2'b00};            // Normal access OKAY
-            bins exokay = {2'b01};            // Exclusive OKAY
-            bins slverr = {2'b10};            // Slave error
-            bins decerr = {2'b11};            // Decode error
+            ignore_bins unsupported = {2'b01,2'b10,2'b11};
         }
 
         // 8. Cross Coverage

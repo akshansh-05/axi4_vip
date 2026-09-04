@@ -13,6 +13,7 @@ package axi_env_pkg;
     import axi_mm_pkg::*;
 
     `include "axi_coverage.sv"
+    // `include "axi_scoreboard.sv"
     `include "axi_env.sv"
 
 endpackage : axi_env_pkg
