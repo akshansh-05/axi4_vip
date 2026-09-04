@@ -94,11 +94,13 @@ cov_ram: setup
 	@echo "[XCELIUM] Running RAM Test with Coverage: $(TEST)"
 	$(XRUN_BASE) +define+RAM_STANDALONE -coverage all -covoverwrite -covworkdir ./cov_work -covtest $(TEST) -l $(LOG_DIR)/sim_ram_$(TEST)_cov.log
 
-# Clean environment override for VMANAGER2009 IMC
-IMC_CMD := env PATH=/home/installs/VMANAGER2009/bin:/home/installs/VMANAGER2009/tools/bin:$(PATH) \
-               LD_LIBRARY_PATH=/home/installs/VMANAGER2009/tools/lib/64bit:/home/installs/VMANAGER2009/tools/lib:/home/installs/XCELIUM2009/tools/lib/64bit:/home/installs/XCELIUM2009/tools/lib \
-               IUSHOME=/home/installs/VMANAGER2009 \
-               CDSHOME=/home/installs/VMANAGER2009 \
+# Clean environment override for VMANAGER2009 IMC (stripping old INCISIVE152 variables)
+IMC_CMD := env -i HOME=$(HOME) USER=$(USER) DISPLAY=$(DISPLAY) \
+               PATH=/home/installs/VMANAGER2009/bin:/home/installs/XCELIUM2009/bin:/home/installs/XCELIUM2009/tools/bin:/usr/bin:/bin \
+               CDS_LIC_FILE=5280@14.139.1.126 \
+               XCELIUMHOME=/home/installs/XCELIUM2009 \
+               IUSHOME=/home/installs/XCELIUM2009 \
+               CDS_INST_DIR=/home/installs/XCELIUM2009 \
                /home/installs/VMANAGER2009/bin/imc
 
 # Generate Text and HTML Coverage Reports using Cadence IMC

@@ -81,10 +81,12 @@ generate_coverage_report() {
     mkdir -p cov_html_report
     echo "[INFO] Invoking Cadence IMC (VMANAGER2009)..."
     
-    env PATH=/home/installs/VMANAGER2009/bin:/home/installs/VMANAGER2009/tools/bin:$PATH \
-        LD_LIBRARY_PATH=/home/installs/VMANAGER2009/tools/lib/64bit:/home/installs/VMANAGER2009/tools/lib:/home/installs/XCELIUM2009/tools/lib/64bit:/home/installs/XCELIUM2009/tools/lib \
-        IUSHOME=/home/installs/VMANAGER2009 \
-        CDSHOME=/home/installs/VMANAGER2009 \
+    env -i HOME=$HOME USER=$USER DISPLAY=$DISPLAY \
+        PATH=/home/installs/VMANAGER2009/bin:/home/installs/XCELIUM2009/bin:/home/installs/XCELIUM2009/tools/bin:/usr/bin:/bin \
+        CDS_LIC_FILE=5280@14.139.1.126 \
+        XCELIUMHOME=/home/installs/XCELIUM2009 \
+        IUSHOME=/home/installs/XCELIUM2009 \
+        CDS_INST_DIR=/home/installs/XCELIUM2009 \
         /home/installs/VMANAGER2009/bin/imc -load cov_work/scope/$target_test -execcmd "\
             report -summary -out cov_report.txt -metrics all; \
             report -detail -out cov_detailed_report.txt -metrics all -all; \
