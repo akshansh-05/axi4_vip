@@ -82,6 +82,7 @@ generate_coverage_report() {
     echo "[INFO] Invoking Cadence IMC (VMANAGER2009)..."
     
     env PATH=/home/installs/VMANAGER2009/bin:/home/installs/VMANAGER2009/tools/bin:$PATH \
+        LD_LIBRARY_PATH=/home/installs/VMANAGER2009/tools/lib/64bit:/home/installs/VMANAGER2009/tools/lib:/home/installs/XCELIUM2009/tools/lib/64bit:/home/installs/XCELIUM2009/tools/lib \
         IUSHOME=/home/installs/VMANAGER2009 \
         CDSHOME=/home/installs/VMANAGER2009 \
         /home/installs/VMANAGER2009/bin/imc -load cov_work/scope/$target_test -execcmd "\

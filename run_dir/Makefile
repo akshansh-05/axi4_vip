@@ -95,7 +95,11 @@ cov_ram: setup
 	$(XRUN_BASE) +define+RAM_STANDALONE -coverage all -covoverwrite -covworkdir ./cov_work -covtest $(TEST) -l $(LOG_DIR)/sim_ram_$(TEST)_cov.log
 
 # Clean environment override for VMANAGER2009 IMC
-IMC_CMD := env PATH=/home/installs/VMANAGER2009/bin:/home/installs/VMANAGER2009/tools/bin:$(PATH) IUSHOME=/home/installs/VMANAGER2009 CDSHOME=/home/installs/VMANAGER2009 /home/installs/VMANAGER2009/bin/imc
+IMC_CMD := env PATH=/home/installs/VMANAGER2009/bin:/home/installs/VMANAGER2009/tools/bin:$(PATH) \
+               LD_LIBRARY_PATH=/home/installs/VMANAGER2009/tools/lib/64bit:/home/installs/VMANAGER2009/tools/lib:/home/installs/XCELIUM2009/tools/lib/64bit:/home/installs/XCELIUM2009/tools/lib \
+               IUSHOME=/home/installs/VMANAGER2009 \
+               CDSHOME=/home/installs/VMANAGER2009 \
+               /home/installs/VMANAGER2009/bin/imc
 
 # Generate Text and HTML Coverage Reports using Cadence IMC
 report_cov:
