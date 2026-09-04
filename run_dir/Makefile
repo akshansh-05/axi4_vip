@@ -89,9 +89,22 @@ run_ram: setup
 gui_ram:
 	$(MAKE) run_ram TEST=$(TEST) GUI=1
 
+# Run with Functional/Code Coverage
+cov_ram: setup
+	@echo "[XCELIUM] Running RAM Test with Coverage: $(TEST)"
+	$(XRUN_BASE) +define+RAM_STANDALONE -coverage all -covoverwrite -covworkdir ./cov_work -covtest $(TEST) -l $(LOG_DIR)/sim_ram_$(TEST)_cov.log
+
+# Generate HTML Coverage Report using Cadence IMC
+report_cov:
+	@echo "[IMC] Generating HTML Coverage Report..."
+	@mkdir -p cov_html_report
+	imc -batch -execute "load -run cov_work/scope/$(TEST); report -html -out cov_html_report -detail -metrics functional; exit" || \
+	imc -batch -execute "load -run ./cov_work/scope/$(TEST); report -html -out cov_html_report -all; exit"
+	@echo ">>> Coverage HTML Report generated at: cov_html_report/index.html"
+
 # -------------------------------------------------------------------------------
 # 6. Clean Target
 # -------------------------------------------------------------------------------
 clean:
 	@echo "[CLEAN] Removing simulation temporary files, logs, and databases..."
-	rm -rf xcelium.d xrun.* waves.shm *.vcd *.log *.key .simvision INCA_libs .bpad $(LOG_DIR)
+	rm -rf xcelium.d xrun.* waves.shm *.vcd *.log *.key .simvision INCA_libs .bpad $(LOG_DIR) cov_work/ cov_html_report/ imc.log imc.key

@@ -7,9 +7,11 @@
 #   ./run_cmd.sh                          (Runs default active test from testlist.f)
 #   ./run_cmd.sh <test_name>              (Runs specific test, e.g. ./run_cmd.sh axi_sanity_test)
 #   ./run_cmd.sh <test_name> -gui         (Runs specific test with SimVision GUI)
+#   ./run_cmd.sh <test_name> -cov         (Runs with functional/code coverage collection)
+#   ./run_cmd.sh -report [test_name]      (Generates HTML coverage report using Cadence IMC)
 #   ./run_cmd.sh -list                    (Lists all tests registered in testlist.f)
 #   ./run_cmd.sh -all                     (Runs ALL active tests in testlist.f)
-#   ./run_cmd.sh -clean                   (Cleans work libraries and logs)
+#   ./run_cmd.sh -clean                   (Cleans work libraries, logs, and coverage)
 # ===============================================================================
 
 TESTLIST_FILE="testlist.f"
@@ -19,6 +21,8 @@ FILELIST="filelist.f"
 MODE="ram"
 TEST=""
 GUI=""
+COV=""
+GEN_REPORT=0
 VERBOSITY="UVM_MEDIUM"
 SEED="random"
 RUN_ALL=0
@@ -53,6 +57,40 @@ list_tests() {
     exit 0
 }
 
+# Function to generate HTML Coverage report using Cadence IMC
+generate_coverage_report() {
+    local target_test="$1"
+    if [[ -z "$target_test" ]]; then
+        if [[ ${#ACTIVE_TESTS[@]} -gt 0 ]]; then
+            target_test="${ACTIVE_TESTS[0]}"
+        else
+            target_test="axi_sanity_test"
+        fi
+    fi
+
+    echo "==============================================================================="
+    echo " [GENERATING COVERAGE REPORT] : Target Test '$target_test'"
+    echo "==============================================================================="
+
+    if [[ ! -d "cov_work" ]]; then
+        echo "[ERROR] 'cov_work' directory not found. Please run tests with '-cov' flag first:"
+        echo "        ./run_cmd.sh $target_test -cov"
+        exit 1
+    fi
+
+    mkdir -p cov_html_report
+    echo "[INFO] Invoking Cadence IMC (Integrated Metrics Center) in batch mode..."
+    
+    imc -batch -execute "load -run cov_work/scope/$target_test; report -html -out cov_html_report -detail -metrics functional; exit" || \
+    imc -batch -execute "load -run ./cov_work/scope/$target_test; report -html -out cov_html_report -all; exit"
+
+    echo ""
+    echo "==============================================================================="
+    echo " [SUCCESS] Coverage HTML Report generated at: cov_html_report/index.html"
+    echo "==============================================================================="
+    exit 0
+}
+
 # Parse positional argument if first argument is a test name (does not start with '-')
 if [[ $# -gt 0 && ! "$1" =~ ^- ]]; then
     TEST="$1"
@@ -74,6 +112,14 @@ while [[ $# -gt 0 ]]; do
             GUI="-gui -linedebug"
             shift
             ;;
+        -cov|-coverage)
+            COV="ENABLE"
+            shift
+            ;;
+        -report|-html)
+            GEN_REPORT=1
+            shift
+            ;;
         -verb|-verbosity)
             VERBOSITY="$2"
             shift 2
@@ -90,8 +136,8 @@ while [[ $# -gt 0 ]]; do
             list_tests
             ;;
         -clean)
-            echo "[INFO] Cleaning previous simulation artifacts..."
-            rm -rf xcelium.d xrun.* waves.shm *.vcd *.log *.key .simvision INCA_libs .bpad logs/
+            echo "[INFO] Cleaning previous simulation and coverage artifacts..."
+            rm -rf xcelium.d xrun.* waves.shm *.vcd *.log *.key .simvision INCA_libs .bpad logs/ cov_work/ cov_html_report/ imc.log imc.key
             exit 0
             ;;
         -help|-h)
@@ -105,6 +151,8 @@ while [[ $# -gt 0 ]]; do
             echo "   ./run_cmd.sh                      Run default test from $TESTLIST_FILE"
             echo "   ./run_cmd.sh <test_name>          Run specific test"
             echo "   ./run_cmd.sh <test_name> -gui     Run with SimVision Waveform GUI"
+            echo "   ./run_cmd.sh <test_name> -cov     Run with Functional Coverage enabled"
+            echo "   ./run_cmd.sh -report [test_name]  Generate HTML coverage report via IMC"
             echo "   ./run_cmd.sh -all                 Run all active tests in $TESTLIST_FILE"
             echo "   ./run_cmd.sh -list                List registered tests in $TESTLIST_FILE"
             echo "   ./run_cmd.sh -clean               Clean simulation logs and databases"
@@ -121,6 +169,11 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# If report generation flag was passed, run report generator directly
+if [[ $GEN_REPORT -eq 1 ]]; then
+    generate_coverage_report "$TEST"
+fi
 
 mkdir -p logs
 
@@ -156,6 +209,12 @@ run_single_test() {
     echo " [RUNNING TEST] : $t_name  (Mode: $MODE)"
     echo "==============================================================================="
 
+    local cov_flags=""
+    if [[ "$COV" == "ENABLE" ]]; then
+        cov_flags="-coverage all -covoverwrite -covworkdir ./cov_work -covtest $t_name"
+        echo "[INFO] Coverage collection enabled (Target: ./cov_work/scope/$t_name)"
+    fi
+
     local cmd="xrun -64bit -sv -uvm \
          -timescale 1ns/1ns \
          -access +rwc \
@@ -166,6 +225,7 @@ run_single_test() {
          $INPUT_TCL \
          -f $FILELIST \
          -l $log_file \
+         $cov_flags \
          $GUI \
          $EXTRA_ARGS"
 
