@@ -94,13 +94,19 @@ cov_ram: setup
 	@echo "[XCELIUM] Running RAM Test with Coverage: $(TEST)"
 	$(XRUN_BASE) +define+RAM_STANDALONE -coverage all -covoverwrite -covworkdir ./cov_work -covtest $(TEST) -l $(LOG_DIR)/sim_ram_$(TEST)_cov.log
 
-# Generate HTML Coverage Report using Cadence IMC
+# Generate Text and HTML Coverage Reports using Cadence IMC
 report_cov:
-	@echo "[IMC] Generating HTML Coverage Report..."
+	@echo "[IMC] Generating Summary and Detailed Coverage Reports..."
 	@mkdir -p cov_html_report
-	imc -load cov_work/scope/$(TEST) -batch -execcmd "report -html -out cov_html_report -detail -metrics functional" || \
-	imc -load ./cov_work/scope/$(TEST) -batch -execcmd "report -html -out cov_html_report -all"
-	@echo ">>> Coverage HTML Report generated at: cov_html_report/index.html"
+	imc -load cov_work/scope/$(TEST) -batch -execcmd "\
+	    report -summary -out cov_report.txt -metrics all; \
+	    report -detail -out cov_detailed_report.txt -metrics all -all; \
+	    report -html -out cov_html_report -detail -metrics all"
+	@echo "==============================================================================="
+	@echo ">>> 1. Summary Report  : cov_report.txt"
+	@echo ">>> 2. Detailed Report : cov_detailed_report.txt (Bin-level hit/miss breakdown)"
+	@echo ">>> 3. HTML Report     : cov_html_report/index.html"
+	@echo "==============================================================================="
 
 # -------------------------------------------------------------------------------
 # 6. Clean Target

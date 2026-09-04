@@ -69,7 +69,7 @@ generate_coverage_report() {
     fi
 
     echo "==============================================================================="
-    echo " [GENERATING COVERAGE REPORT] : Target Test '$target_test'"
+    echo " [GENERATING COVERAGE REPORTS] : Target Test '$target_test'"
     echo "==============================================================================="
 
     if [[ ! -d "cov_work" ]]; then
@@ -81,12 +81,17 @@ generate_coverage_report() {
     mkdir -p cov_html_report
     echo "[INFO] Invoking Cadence IMC (Integrated Metrics Center) in batch mode..."
     
-    imc -load cov_work/scope/$target_test -batch -execcmd "report -html -out cov_html_report -detail -metrics functional" || \
-    imc -load ./cov_work/scope/$target_test -batch -execcmd "report -html -out cov_html_report -all"
+    imc -load cov_work/scope/$target_test -batch -execcmd "\
+        report -summary -out cov_report.txt -metrics all; \
+        report -detail -out cov_detailed_report.txt -metrics all -all; \
+        report -html -out cov_html_report -detail -metrics all"
 
     echo ""
     echo "==============================================================================="
-    echo " [SUCCESS] Coverage HTML Report generated at: cov_html_report/index.html"
+    echo " [SUCCESS] Coverage Reports Generated:"
+    echo "   1. Summary Report  : cov_report.txt"
+    echo "   2. Detailed Report : cov_detailed_report.txt (Bin-level breakdown)"
+    echo "   3. HTML Report     : cov_html_report/index.html"
     echo "==============================================================================="
     exit 0
 }
