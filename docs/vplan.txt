@@ -67,7 +67,7 @@ RTL Target: Internal hardware counter 'burst_cnt[7:0]' & comparator 'burst_cnt =
 |               | (2-16 beats)| and 4-bit boundary rollover.  | N-1 or N+1; corrupts CPU cache lines.   |
 +---------------+-------------+-------------------------------+-----------------------------------------+
 | med_burst     | [16:63]     | 5th and 6th counter bits      | Bit-Drop Bug: RTL counter declared as   |
-|               | (17-64 beats| (burst_cnt[5:4]).             | 4-bit; transfers >16 beats truncate.    |
+|               |(17-64 beats)| (burst_cnt[5:4]).             | 4-bit; transfers >16 beats truncate.    |
 +---------------+-------------+-------------------------------+-----------------------------------------+
 | long_burst    | [64:254]    | High-throughput continuous    | FIFO Underflow/Overflow: Stresses array |
 |               | (65-255 b)  | memory write streaming.       | writes without pipeline bubbles.        |
