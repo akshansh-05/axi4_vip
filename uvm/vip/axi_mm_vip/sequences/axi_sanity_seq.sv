@@ -1,11 +1,11 @@
 // File: axi_sanity_seq.sv
-// Sanity sequence for AXI4 Memory-Mapped bus.
-// Sends a 4-beat Write burst followed by a 4-beat Read burst to address 0x1000.
+// Dedicated Sanity sequences for AXI Write and Read agents.
 
 `ifndef AXI_SANITY_SEQ_SV
 `define AXI_SANITY_SEQ_SV
 
-class axi_sanity_seq #(
+// Write Sanity Sequence (Runs on axi_wr_agent.seqr)
+class axi_wr_sanity_seq #(
     parameter DATA_WIDTH = 32,
     parameter ADDR_WIDTH = 16,
     parameter ID_WIDTH   = 8,
@@ -14,19 +14,17 @@ class axi_sanity_seq #(
 
     typedef axi_seq_item #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) item_type;
 
-    `uvm_object_param_utils(axi_sanity_seq #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
+    `uvm_object_param_utils(axi_wr_sanity_seq #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
 
-    function new(string name = "axi_sanity_seq");
+    function new(string name = "axi_wr_sanity_seq");
         super.new(name);
     endfunction : new
 
     virtual task body();
         item_type wr_item;
-        item_type rd_item;
 
-        `uvm_info("SANITY_SEQ", "Starting AXI Sanity Sequence: 4-Beat Write followed by 4-Beat Read", UVM_LOW)
+        `uvm_info("WR_SANITY_SEQ", "Starting AXI Write Sanity Sequence: 4-Beat Write to 0x1000", UVM_LOW)
 
-        // 1. Send 4-Beat Write Burst to Address 0x1000
         wr_item = item_type::type_id::create("wr_item");
         start_item(wr_item);
         if (!wr_item.randomize() with {
@@ -41,13 +39,38 @@ class axi_sanity_seq #(
                 data_delay[i] == 0;
             }
         }) begin
-            `uvm_fatal("SANITY_SEQ", "Randomization failed for wr_item")
+            `uvm_fatal("WR_SANITY_SEQ", "Randomization failed for wr_item")
         end
-        `uvm_info("SANITY_SEQ", "Generated Write Transaction:", UVM_MEDIUM)
-        wr_item.print();
-        finish_item(wr_item);
 
-        // 2. Send 4-Beat Read Burst from Address 0x1000
+        `uvm_info("WR_SANITY_SEQ", $sformatf("Generated Write Transaction:\n%s", wr_item.sprint()), UVM_LOW)
+        finish_item(wr_item);
+        `uvm_info("WR_SANITY_SEQ", "AXI Write Sanity Sequence Completed", UVM_LOW)
+    endtask
+
+endclass : axi_wr_sanity_seq
+
+
+// Read Sanity Sequence (Runs on axi_rd_agent.seqr)
+class axi_rd_sanity_seq #(
+    parameter DATA_WIDTH = 32,
+    parameter ADDR_WIDTH = 16,
+    parameter ID_WIDTH   = 8,
+    parameter STRB_WIDTH = (DATA_WIDTH / 8)
+) extends uvm_sequence #(axi_seq_item #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH));
+
+    typedef axi_seq_item #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) item_type;
+
+    `uvm_object_param_utils(axi_rd_sanity_seq #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
+
+    function new(string name = "axi_rd_sanity_seq");
+        super.new(name);
+    endfunction : new
+
+    virtual task body();
+        item_type rd_item;
+
+        `uvm_info("RD_SANITY_SEQ", "Starting AXI Read Sanity Sequence: 4-Beat Read from 0x1000", UVM_LOW)
+
         rd_item = item_type::type_id::create("rd_item");
         rd_item.data.rand_mode(0);
         rd_item.strb.rand_mode(0);
@@ -61,15 +84,14 @@ class axi_sanity_seq #(
             burst      == AXI_BURST_INCR;
             addr_delay == 0;
         }) begin
-            `uvm_fatal("SANITY_SEQ", "Randomization failed for rd_item")
+            `uvm_fatal("RD_SANITY_SEQ", "Randomization failed for rd_item")
         end
-        `uvm_info("SANITY_SEQ", "Generated Read Transaction:", UVM_MEDIUM)
-        rd_item.print();
-        finish_item(rd_item);
 
-        `uvm_info("SANITY_SEQ", "AXI Sanity Sequence Completed Successfully", UVM_LOW)
+        `uvm_info("RD_SANITY_SEQ", $sformatf("Generated Read Transaction:\n%s", rd_item.sprint()), UVM_LOW)
+        finish_item(rd_item);
+        `uvm_info("RD_SANITY_SEQ", "AXI Read Sanity Sequence Completed", UVM_LOW)
     endtask
 
-endclass : axi_sanity_seq
+endclass : axi_rd_sanity_seq
 
 `endif // AXI_SANITY_SEQ_SV

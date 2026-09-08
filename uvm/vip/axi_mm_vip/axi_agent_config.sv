@@ -20,6 +20,7 @@ class axi_agent_config #(
     // Instantiate the Virtual interface handle
     virtual axi_if #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) vif;
 
+
 `uvm_object_param_utils(axi_agent_config #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
 
 function new(string name = "axi_agent_config");

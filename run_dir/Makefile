@@ -34,7 +34,7 @@ endif
 # -------------------------------------------------------------------------------
 .PHONY: help setup clean \
         test_ram test_dma test_sys test_all \
-        run_ram gui_ram
+        run_ram gui_ram waves_ram cov_ram report_cov imc_gui
 
 # -------------------------------------------------------------------------------
 # 3. Help Menu
@@ -54,7 +54,12 @@ help:
 	@echo "    make waves_ram                 : Open generated waves.shm in Cadence SimVision"
 	@echo "    make gui_ram [TEST=<name>]     : Run test with interactive SimVision GUI"
 	@echo ""
-	@echo " 3. UTILITIES:"
+	@echo " 3. COVERAGE & ANALYSIS (Cadence IMC):"
+	@echo "    make cov_ram [TEST=<name>]     : Run simulation with Full Code & Functional Coverage"
+	@echo "    make report_cov [TEST=<name>]  : Generate Text & HTML Coverage Reports"
+	@echo "    make imc_gui [TEST=<name>]     : Launch Cadence IMC GUI to inspect coverage database"
+	@echo ""
+	@echo " 4. UTILITIES:"
 	@echo "    make clean                     : Remove simulation logs, work libraries, and dumps"
 	@echo "==============================================================================="
 
@@ -89,6 +94,10 @@ run_ram: setup
 gui_ram:
 	$(MAKE) run_ram TEST=$(TEST) GUI=1
 
+waves_ram:
+	@echo "[SIMVISION] Opening waveforms..."
+	simvision waves.shm &
+
 # Run with Functional/Code Coverage
 cov_ram: setup
 	@echo "[XCELIUM] Running RAM Test with Coverage: $(TEST)"
@@ -117,9 +126,15 @@ report_cov:
 	@echo ">>> 3. HTML Report     : cov_html_report/index.html"
 	@echo "==============================================================================="
 
+# Launch Cadence IMC GUI to inspect coverage graphically
+imc_gui:
+	@echo "[IMC] Launching Cadence IMC Coverage GUI for test: $(TEST)..."
+	$(IMC_CMD) -load cov_work/scope/$(TEST) &
+
 # -------------------------------------------------------------------------------
 # 6. Clean Target
 # -------------------------------------------------------------------------------
 clean:
 	@echo "[CLEAN] Removing simulation temporary files, logs, and databases..."
 	rm -rf xcelium.d xrun.* waves.shm *.vcd *.log *.key .simvision INCA_libs .bpad $(LOG_DIR) cov_work/ cov_html_report/ imc.log imc.key
+

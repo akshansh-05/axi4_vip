@@ -1,10 +1,10 @@
-// File: axi_agent.sv
-// UVM Agent encapsulating Driver, Monitor, and Sequencer for AXI4-MM bus.
+// File: axi_rd_agent.sv
+// Dedicated UVM Agent for AXI4 Memory-Mapped Read Channels (AR, R).
 
-`ifndef AXI_AGENT_SV
-`define AXI_AGENT_SV
+`ifndef AXI_RD_AGENT_SV
+`define AXI_RD_AGENT_SV
 
-class axi_agent #(
+class axi_rd_agent #(
     parameter DATA_WIDTH = 32,
     parameter ADDR_WIDTH = 16,
     parameter ID_WIDTH   = 8,
@@ -12,8 +12,8 @@ class axi_agent #(
 ) extends uvm_agent;
 
     typedef axi_agent_config #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) cfg_type;
-    typedef axi_driver       #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) drv_type;
-    typedef axi_monitor      #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) mon_type;
+    typedef axi_rd_driver    #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) drv_type;
+    typedef axi_rd_monitor   #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) mon_type;
     typedef axi_sequencer    #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) seqr_type;
 
     cfg_type  cfg;
@@ -21,9 +21,9 @@ class axi_agent #(
     mon_type  mon;
     seqr_type seqr;
 
-    `uvm_component_param_utils(axi_agent #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
+    `uvm_component_param_utils(axi_rd_agent #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
 
-    function new(string name = "axi_agent", uvm_component parent = null);
+    function new(string name = "axi_rd_agent", uvm_component parent = null);
         super.new(name, parent);
     endfunction : new
 
@@ -31,13 +31,11 @@ class axi_agent #(
         super.build_phase(phase);
 
         if (!uvm_config_db#(cfg_type)::get(this, "", "cfg", cfg)) begin
-            `uvm_fatal("AGT_CFG", "Failed to get axi_agent_config from config_db")
+            `uvm_fatal("RD_AGT_CFG", "Failed to get axi_agent_config from config_db")
         end
 
-        // Monitor is always instantiated in both active and passive modes
         mon = mon_type::type_id::create("mon", this);
 
-        // Driver and Sequencer are created only in active mode
         if (cfg.is_active == UVM_ACTIVE) begin
             drv  = drv_type::type_id::create("drv", this);
             seqr = seqr_type::type_id::create("seqr", this);
@@ -47,12 +45,11 @@ class axi_agent #(
     virtual function void connect_phase(uvm_phase phase);
         super.connect_phase(phase);
 
-        // Connect driver to sequencer in active mode
         if (cfg.is_active == UVM_ACTIVE) begin
             drv.seq_item_port.connect(seqr.seq_item_export);
         end
     endfunction : connect_phase
 
-endclass : axi_agent
+endclass : axi_rd_agent
 
-`endif // AXI_AGENT_SV
+`endif // AXI_RD_AGENT_SV

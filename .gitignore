@@ -37,5 +37,6 @@ work/
 # OS / Editor Files
 .DS_Store
 Thumbs.db
+*.db
 .vscode/
 .idea/

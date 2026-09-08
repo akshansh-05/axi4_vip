@@ -11,10 +11,13 @@ package axi_mm_pkg;
 
     `include "axi_seq_item.sv"
     `include "axi_agent_config.sv"
-    `include "axi_driver.sv"
-    `include "axi_monitor.sv"
     `include "axi_sequencer.sv"
-    `include "axi_agent.sv"
+    `include "axi_wr_driver.sv"
+    `include "axi_rd_driver.sv"
+    `include "axi_wr_monitor.sv"
+    `include "axi_rd_monitor.sv"
+    `include "axi_wr_agent.sv"
+    `include "axi_rd_agent.sv"
 
     // Sequences
     `include "sequences/axi_sanity_seq.sv"

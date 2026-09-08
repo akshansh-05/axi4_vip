@@ -102,6 +102,37 @@ generate_coverage_report() {
     exit 0
 }
 
+# Function to launch IMC GUI
+launch_imc_gui() {
+    local target_test="$1"
+    if [[ -z "$target_test" ]]; then
+        if [[ ${#ACTIVE_TESTS[@]} -gt 0 ]]; then
+            target_test="${ACTIVE_TESTS[0]}"
+        else
+            target_test="axi_sanity_test"
+        fi
+    fi
+
+    echo "==============================================================================="
+    echo " [LAUNCHING IMC GUI] : Loading test '$target_test' in Cadence IMC"
+    echo "==============================================================================="
+
+    if [[ ! -d "cov_work" ]]; then
+        echo "[ERROR] 'cov_work' directory not found. Please run tests with '-cov' flag first:"
+        echo "        ./run_cmd.sh $target_test -cov"
+        exit 1
+    fi
+
+    env -i HOME=$HOME USER=$USER DISPLAY=$DISPLAY \
+        PATH=/home/installs/VMANAGER2009/bin:/home/installs/XCELIUM2009/bin:/home/installs/XCELIUM2009/tools/bin:/usr/bin:/bin \
+        CDS_LIC_FILE=5280@14.139.1.126 \
+        XCELIUMHOME=/home/installs/XCELIUM2009 \
+        IUSHOME=/home/installs/XCELIUM2009 \
+        CDS_INST_DIR=/home/installs/XCELIUM2009 \
+        /home/installs/VMANAGER2009/bin/imc -load cov_work/scope/$target_test &
+    exit 0
+}
+
 # Parse positional argument if first argument is a test name (does not start with '-')
 if [[ $# -gt 0 && ! "$1" =~ ^- ]]; then
     TEST="$1"
@@ -130,6 +161,9 @@ while [[ $# -gt 0 ]]; do
         -report|-html)
             GEN_REPORT=1
             shift
+            ;;
+        -imc|-imcgui|-covgui)
+            launch_imc_gui "$TEST"
             ;;
         -verb|-verbosity)
             VERBOSITY="$2"
@@ -164,6 +198,7 @@ while [[ $# -gt 0 ]]; do
             echo "   ./run_cmd.sh <test_name> -gui     Run with SimVision Waveform GUI"
             echo "   ./run_cmd.sh <test_name> -cov     Run with Functional Coverage enabled"
             echo "   ./run_cmd.sh -report [test_name]  Generate HTML coverage report via IMC"
+            echo "   ./run_cmd.sh -imcgui [test_name]  Launch interactive Cadence IMC GUI"
             echo "   ./run_cmd.sh -all                 Run all active tests in $TESTLIST_FILE"
             echo "   ./run_cmd.sh -list                List registered tests in $TESTLIST_FILE"
             echo "   ./run_cmd.sh -clean               Clean simulation logs and databases"

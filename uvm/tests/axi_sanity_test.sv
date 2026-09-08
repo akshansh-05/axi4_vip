@@ -6,7 +6,8 @@
 
 class axi_sanity_test extends base_test;
 
-    typedef axi_sanity_seq #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) seq_type;
+    typedef axi_wr_sanity_seq #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) wr_seq_type;
+    typedef axi_rd_sanity_seq #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) rd_seq_type;
 
     `uvm_component_utils(axi_sanity_test)
 
@@ -15,17 +16,25 @@ class axi_sanity_test extends base_test;
     endfunction : new
 
     virtual task run_phase(uvm_phase phase);
-        seq_type seq;
-        seq = seq_type::type_id::create("seq");
+        wr_seq_type wr_seq;
+        rd_seq_type rd_seq;
+
+        wr_seq = wr_seq_type::type_id::create("wr_seq");
+        rd_seq = rd_seq_type::type_id::create("rd_seq");
 
         phase.raise_objection(this, "Starting AXI Sanity Test");
-        `uvm_info("SANITY_TEST", "Executing axi_sanity_seq on axi_ram...", UVM_LOW)
+        `uvm_info("SANITY_TEST", "Executing Write and Read sanity sequences on axi_ram", UVM_LOW)
 
-        // Launch sanity sequence on the AXI Master sequencer
-        seq.start(env.axi_agent.seqr);
+        // 1. Launch Write sanity sequence on Write Agent Sequencer
+        wr_seq.start(env.axi_wr_agent.seqr);
+        `uvm_info("SANITY_TEST", "Executing Write sanity sequence", UVM_MEDIUM)
+
+        // 2. Launch Read sanity sequence on Read Agent Sequencer
+        rd_seq.start(env.axi_rd_agent.seqr);
+        `uvm_info("SANITY_TEST", "Executing Read sanity sequence", UVM_MEDIUM)
 
         #100; // Small drain time to observe bus idle in waveforms
-        `uvm_info("SANITY_TEST", "Sanity Test Completed Successfully!", UVM_LOW)
+        `uvm_info("SANITY_TEST", "Sanity Test Completed Successfully!", UVM_MEDIUM)
         phase.drop_objection(this, "Completed AXI Sanity Test");
     endtask : run_phase
 

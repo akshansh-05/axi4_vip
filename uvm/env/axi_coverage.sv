@@ -23,10 +23,9 @@ class axi_coverage #(
     bit [7:0]            latched_awlen;
     bit [2:0]            latched_awsize;
 
-    // =========================================================================
     // Covergroup: TRANSACTION-LEVEL Write Channels (AW, B)
     // Sampled ONCE per completed write burst to avoid statistical distortion.
-    // =========================================================================
+
     covergroup cg_axi_write_xact;
         option.per_instance = 1;
         option.name = "cg_axi_write_xact";
@@ -35,13 +34,14 @@ class axi_coverage #(
         // Protocol Note (AXI4 Section A3.4.1): Beats = AWLEN + 1.
         // Bins len_2, len_4, len_8, len_16 are isolated specifically to match the 
         // strictly allowed wrapping burst lengths (2, 4, 8, 16 transfers).
+    
         cp_awlen: coverpoint txn.len {
             bins single_beat = {0};                  // 1 beat transfer (AWLEN=0)
             bins len_2       = {1};                  // 2 beats  (AWLEN=1,  valid for WRAP/INCR/FIXED)
             bins len_4       = {3};                  // 4 beats  (AWLEN=3,  valid for WRAP/INCR/FIXED)
             bins len_8       = {7};                  // 8 beats  (AWLEN=7,  valid for WRAP/INCR/FIXED)
             bins len_16      = {15};                 // 16 beats (AWLEN=15, valid for WRAP/INCR/FIXED)
-            bins other_short = {[2], [4:6], [8:14]}; // 3, 5..7, 9..15 beats (INCR & FIXED only, illegal for WRAP)
+            bins other_short = {2, [4:6], [8:14]}; // 3, 5..7, 9..15 beats (INCR & FIXED only, illegal for WRAP)
             bins med_burst   = {[16:63]};            // 17 to 64 beats (INCR only, illegal for FIXED & WRAP)
             bins long_burst  = {[64:254]};           // 65 to 255 beats (INCR only, illegal for FIXED & WRAP)
             bins max_burst   = {255};                // 256 beats (AXI4 max limit, INCR only)
@@ -49,6 +49,7 @@ class axi_coverage #(
 
         // 2. Transfer Size per Beat (AWSIZE: 1B, 2B, 4B)
         // AXI4 Section A3.4.1: Transfer size shall not exceed the data bus width (32-bit = 4B).
+
         cp_awsize: coverpoint txn.size {
             bins size_1B = {3'b000};          // 1 Byte  (8-bit narrow transfer)
             bins size_2B = {3'b001};          // 2 Bytes (16-bit narrow transfer)
@@ -136,10 +137,9 @@ class axi_coverage #(
 
     endgroup : cg_axi_write_xact
 
-    // =========================================================================
     // Covergroup: PER-BEAT Write Attributes (W Channel)
     // Sampled for EVERY accepted beat (WVALID && WREADY) in the write burst.
-    // =========================================================================
+
     covergroup cg_axi_write_beat;
         option.per_instance = 1;
         option.name = "cg_axi_write_beat";
@@ -150,7 +150,7 @@ class axi_coverage #(
             bins len_4       = {3};
             bins len_8       = {7};
             bins len_16      = {15};
-            bins other_short = {[2], [4:6], [8:14]};
+            bins other_short = {2, [4:6], [8:14]};
             bins med_burst   = {[16:63]};
             bins long_burst  = {[64:254]};
             bins max_burst   = {255};
@@ -194,10 +194,9 @@ class axi_coverage #(
 
     endgroup : cg_axi_write_beat
 
-    // =========================================================================
     // Covergroup for Read Channels (AR, R)
     // Sampled ONCE per completed read burst transaction.
-    // =========================================================================
+
     covergroup cg_axi_read;
         option.per_instance = 1;
         option.name         = "cg_axi_read";
@@ -209,7 +208,7 @@ class axi_coverage #(
             bins len_4       = {3};                  // 4 beats  (ARLEN=3,  valid for WRAP/INCR/FIXED)
             bins len_8       = {7};                  // 8 beats  (ARLEN=7,  valid for WRAP/INCR/FIXED)
             bins len_16      = {15};                 // 16 beats (ARLEN=15, valid for WRAP/INCR/FIXED)
-            bins other_short = {[2], [4:6], [8:14]}; // 3, 5..7, 9..15 beats (INCR & FIXED only, illegal for WRAP)
+            bins other_short = {2, [4:6], [8:14]}; // 3, 5..7, 9..15 beats (INCR & FIXED only, illegal for WRAP)
             bins med_burst   = {[16:63]};            // 17 to 64 beats (INCR only, illegal for FIXED & WRAP)
             bins long_burst  = {[64:254]};           // 65 to 255 beats (INCR only, illegal for FIXED & WRAP)
             bins max_burst   = {255};                // 256 beats (AXI4 max limit, INCR only)

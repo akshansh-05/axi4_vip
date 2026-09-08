@@ -55,64 +55,71 @@ interface axi_if #(
     wire                   rvalid;
     wire                   rready;
 
-    // 2. Clocking Blocks (input #1step samples Preponed; output #1ns drives post-edge)
+    // 2. Clocking Blocks (input #1step samples Preponed; output #0 drives immediately after clock edge)
 
-    // Master Driver Clocking Block (For driving Slave DUT e.g. axi_ram)
-    clocking drv_cb @(posedge clk);
+    // 2A. Master Driver Clocking Blocks (For driving Slave DUT e.g. axi_ram)
+    // Master Write Driver Clocking Block (AW, W, B Channels)
+    clocking wr_drv_cb @(posedge clk);
         default input #1step output #0;
-
         output awid, awaddr, awlen, awsize, awburst, awvalid;
         input  awready;
-
         output wdata, wstrb, wlast, wvalid;
         input  wready;
-
         input  bid, bresp, bvalid;
         output bready;
+    endclocking : wr_drv_cb
 
+    // Master Read Driver Clocking Block (AR, R Channels)
+    clocking rd_drv_cb @(posedge clk);
+        default input #1step output #0;
         output arid, araddr, arlen, arsize, arburst, arvalid;
-        input  arready; 
-
+        input  arready;
         input  rid, rdata, rresp, rlast, rvalid;
         output rready;
-    endclocking : drv_cb
+    endclocking : rd_drv_cb
 
-    // Slave Driver Clocking Block (For responding to Master DUT e.g. axi_dma)
-    clocking slv_drv_cb @(posedge clk);
+    // 2B. Slave Driver Clocking Blocks (For responding to Master DUT e.g. axi_dma)
+    // Slave Write Driver Clocking Block (Responds to AW, W; generates B)
+    clocking wr_slv_drv_cb @(posedge clk);
         default input #1step output #0;
-
         input  awid, awaddr, awlen, awsize, awburst, awvalid;
         output awready;
-
         input  wdata, wstrb, wlast, wvalid;
         output wready;
-
         output bid, bresp, bvalid;
         input  bready;
+    endclocking : wr_slv_drv_cb
 
+    // Slave Read Driver Clocking Block (Responds to AR; generates R)
+    clocking rd_slv_drv_cb @(posedge clk);
+        default input #1step output #0;
         input  arid, araddr, arlen, arsize, arburst, arvalid;
         output arready;
-
         output rid, rdata, rresp, rlast, rvalid;
         input  rready;
-    endclocking : slv_drv_cb
+    endclocking : rd_slv_drv_cb
 
-    // Monitor Clocking Block (Sample-only for passive snooping)
-    clocking mon_cb @(posedge clk);
+    // 2C. Monitor Clocking Blocks (Sample-only for passive snooping)
+    clocking wr_mon_cb @(posedge clk);
         default input #1step output #0;
-
         input awid, awaddr, awlen, awsize, awburst, awvalid, awready;
         input wdata, wstrb, wlast, wvalid, wready;
         input bid, bresp, bvalid, bready;
+    endclocking : wr_mon_cb
+
+    clocking rd_mon_cb @(posedge clk);
+        default input #1step output #0;
         input arid, araddr, arlen, arsize, arburst, arvalid, arready;
         input rid, rdata, rresp, rlast, rvalid, rready;
-    endclocking : mon_cb
+    endclocking : rd_mon_cb
 
     // 3. Modports
-
-    modport drv_mp     (clocking drv_cb,     input clk, input rst);
-    modport slv_drv_mp (clocking slv_drv_cb, input clk, input rst);
-    modport mon_mp     (clocking mon_cb,     input clk, input rst);
+    modport wr_drv_mp     (clocking wr_drv_cb,     input clk, input rst);
+    modport rd_drv_mp     (clocking rd_drv_cb,     input clk, input rst);
+    modport wr_slv_drv_mp (clocking wr_slv_drv_cb, input clk, input rst);
+    modport rd_slv_drv_mp (clocking rd_slv_drv_cb, input clk, input rst);
+    modport wr_mon_mp     (clocking wr_mon_cb,     input clk, input rst);
+    modport rd_mon_mp     (clocking rd_mon_cb,     input clk, input rst);
 
 endinterface : axi_if
 
