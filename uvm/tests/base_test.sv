@@ -71,10 +71,7 @@ class base_test extends uvm_test;
     endfunction : end_of_elaboration_phase
 
     virtual task run_phase(uvm_phase phase);
-        phase.raise_objection(this, "Starting Base Test Topology Check");
-        `uvm_info("BASE_TEST", "Executing base_test: Topology elaboration check completed.", UVM_LOW)
-        #50;
-        phase.drop_objection(this, "Completed Base Test Topology Check");
+        // Base test serves as foundation for child tests; no stimulus executed here.
     endtask : run_phase
 
 endclass : base_test
