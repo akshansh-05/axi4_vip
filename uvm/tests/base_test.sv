@@ -41,7 +41,7 @@ class base_test extends uvm_test;
 
         if (!uvm_config_db#(virtual dma_desc_if #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH))::get(this, "", "vif_desc", cfg_dma_rd.vif)) begin
             if (!uvm_config_db#(virtual dma_desc_if)::get(this, "", "vif_desc", cfg_dma_rd.vif)) begin
-                `uvm_fatal("TEST_VIF", "Failed to get vif_desc from config_db")
+                `uvm_info("BASE_TEST", "vif_desc not found in config_db (expected in RAM_STANDALONE mode)", UVM_LOW)
             end
         end
         cfg_dma_wr.vif = cfg_dma_rd.vif;

@@ -91,6 +91,14 @@ run_ram: setup
 	@echo "[XCELIUM] Running RAM Test: $(TEST)"
 	$(XRUN_BASE) +define+RAM_STANDALONE -l $(LOG_DIR)/sim_ram_$(TEST).log
 
+run_dma: setup
+	@echo "[XCELIUM] Running DMA Standalone Test: $(TEST)"
+	$(XRUN_BASE) +define+DMA_STANDALONE -l $(LOG_DIR)/sim_dma_$(TEST).log
+
+run_sys: setup
+	@echo "[XCELIUM] Running Subsystem Test: $(TEST)"
+	$(XRUN_BASE) +define+SUBSYSTEM -l $(LOG_DIR)/sim_sys_$(TEST).log
+
 gui_ram:
 	$(MAKE) run_ram TEST=$(TEST) GUI=1
 
