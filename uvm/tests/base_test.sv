@@ -7,12 +7,15 @@
 
 class base_test extends uvm_test;
 
-    typedef axi_agent_config #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) cfg_type;
-    typedef axi_env          #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) env_type;
+    typedef axi_agent_config      #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) cfg_type;
+    typedef dma_desc_agent_config #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH) dma_cfg_type;
+    typedef dma_subsystem_env     #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH, LEN_WIDTH, TAG_WIDTH, DEST_WIDTH, USER_WIDTH) env_type;
 
-    cfg_type cfg_wr;
-    cfg_type cfg_rd;
-    env_type env;
+    cfg_type     cfg_wr;
+    cfg_type     cfg_rd;
+    dma_cfg_type cfg_dma_rd;
+    dma_cfg_type cfg_dma_wr;
+    env_type     env;
 
     `uvm_component_utils(base_test)
 
@@ -24,19 +27,30 @@ class base_test extends uvm_test;
         super.build_phase(phase);
 
         // 1. Create agent configs and configure mode
-        cfg_wr = cfg_type::type_id::create("cfg_wr");
-        cfg_rd = cfg_type::type_id::create("cfg_rd");
+        cfg_wr     = cfg_type::type_id::create("cfg_wr");
+        cfg_rd     = cfg_type::type_id::create("cfg_rd");
+        cfg_dma_rd = dma_cfg_type::type_id::create("cfg_dma_rd");
+        cfg_dma_wr = dma_cfg_type::type_id::create("cfg_dma_wr");
         configure_agents(cfg_wr, cfg_rd);
 
-        // 2. Fetch virtual interface from top testbench
+        // 2. Fetch virtual interfaces from top testbench
         if (!uvm_config_db#(virtual axi_if #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))::get(this, "", "vif_axi", cfg_wr.vif)) begin
             `uvm_fatal("TEST_VIF", "Failed to get vif_axi from config_db")
         end
         cfg_rd.vif = cfg_wr.vif;
 
+        if (!uvm_config_db#(virtual dma_desc_if #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH))::get(this, "", "vif_desc", cfg_dma_rd.vif)) begin
+            if (!uvm_config_db#(virtual dma_desc_if)::get(this, "", "vif_desc", cfg_dma_rd.vif)) begin
+                `uvm_fatal("TEST_VIF", "Failed to get vif_desc from config_db")
+            end
+        end
+        cfg_dma_wr.vif = cfg_dma_rd.vif;
+
         // 3. Set agent configurations into config_db
         uvm_config_db#(cfg_type)::set(this, "env.axi_wr_agent*", "cfg", cfg_wr);
         uvm_config_db#(cfg_type)::set(this, "env.axi_rd_agent*", "cfg", cfg_rd);
+        uvm_config_db#(dma_cfg_type)::set(this, "env.dma_rd_desc_agent*", "cfg", cfg_dma_rd);
+        uvm_config_db#(dma_cfg_type)::set(this, "env.dma_wr_desc_agent*", "cfg", cfg_dma_wr);
 
         // 4. Create Environment
         env = env_type::type_id::create("env", this);
@@ -57,7 +71,10 @@ class base_test extends uvm_test;
     endfunction : end_of_elaboration_phase
 
     virtual task run_phase(uvm_phase phase);
-        // Base test topology verification and environment build. 
+        phase.raise_objection(this, "Starting Base Test Topology Check");
+        `uvm_info("BASE_TEST", "Executing base_test: Topology elaboration check completed.", UVM_LOW)
+        #50;
+        phase.drop_objection(this, "Completed Base Test Topology Check");
     endtask : run_phase
 
 endclass : base_test

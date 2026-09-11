@@ -109,8 +109,7 @@ class axi_rd_monitor #(
                 end
             end
 
-            `uvm_info("RD_MON", $sformatf("[READ COMPLETE] id=0x%0h addr=0x%04h len=%0d beats",
-                      txn.id, txn.addr, txn.len + 1), UVM_LOW)
+            `uvm_info("RD_MON", $sformatf("[READ COMPLETE] id=0x%0h addr=0x%04h len=%0d beats",txn.id, txn.addr, txn.len + 1), UVM_LOW)
 
             ap.write(txn);
         end

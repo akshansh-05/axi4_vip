@@ -14,7 +14,7 @@ class axi_sanity_test extends base_test;
     function new(string name = "axi_sanity_test", uvm_component parent = null);
         super.new(name, parent);
     endfunction : new
-
+    
     virtual task run_phase(uvm_phase phase);
         wr_seq_type wr_seq;
         rd_seq_type rd_seq;

@@ -27,7 +27,8 @@
 # 4. UVM VIP & Environment Packages (In Dependency Order)
 ../uvm/tb_params_pkg.sv
 ../uvm/vip/axi_mm_vip/axi_mm_pkg.sv
-../uvm/env/axi_env_pkg.sv
+../uvm/vip/dma_desc_vip/dma_desc_pkg.sv
+../uvm/env/dma_subsystem_env_pkg.sv
 ../uvm/tests/axi_test_pkg.sv
 
 # 5. Top-Level Testbench Module

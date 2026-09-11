@@ -11,7 +11,8 @@ package axi_test_pkg;
 
     import tb_params_pkg::*;
     import axi_mm_pkg::*;
-    import axi_env_pkg::*;
+    import dma_desc_pkg::*;
+    import dma_subsystem_env_pkg::*;
 
     `include "base_test.sv"
     `include "axi_sanity_test.sv"
