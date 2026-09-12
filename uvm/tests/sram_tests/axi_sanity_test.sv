@@ -4,7 +4,7 @@
 `ifndef AXI_SANITY_TEST_SV
 `define AXI_SANITY_TEST_SV
 
-class axi_sanity_test extends base_test;
+class axi_sanity_test extends sram_base_test;
 
     typedef axi_wr_sanity_seq #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) wr_seq_type;
     typedef axi_rd_sanity_seq #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) rd_seq_type;

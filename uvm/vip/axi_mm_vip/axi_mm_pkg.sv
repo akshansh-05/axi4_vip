@@ -19,9 +19,6 @@ package axi_mm_pkg;
     `include "axi_wr_agent.sv"
     `include "axi_rd_agent.sv"
 
-    // Sequences
-    `include "sequences/axi_sanity_seq.sv"
-
 endpackage : axi_mm_pkg
 
 `endif // AXI_MM_PKG_SV

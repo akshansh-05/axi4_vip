@@ -12,9 +12,8 @@ package dma_subsystem_env_pkg;
     import tb_params_pkg::*;
     import axi_mm_pkg::*;
     import dma_desc_pkg::*;
+    import axi_ram_env_pkg::*;
 
-    `include "axi_coverage.sv"
-    `include "axi_scoreboard.sv"
     `include "dma_subsystem_env.sv"
 
 endpackage : dma_subsystem_env_pkg

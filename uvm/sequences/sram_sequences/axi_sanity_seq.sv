@@ -1,5 +1,5 @@
 // File: axi_sanity_seq.sv
-// Dedicated Sanity sequences for AXI Write and Read agents.
+// Dedicated Sanity sequences for AXI Write and Read agents on SRAM.
 
 `ifndef AXI_SANITY_SEQ_SV
 `define AXI_SANITY_SEQ_SV

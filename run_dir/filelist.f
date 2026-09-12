@@ -10,8 +10,11 @@
 +incdir+../uvm/vip/axis_vip
 +incdir+../uvm/vip/dma_desc_vip
 +incdir+../uvm/env
-+incdir+../uvm/virtual_sequences
++incdir+../uvm/sequences/sram_sequences
++incdir+../uvm/sequences/dma_sequences
 +incdir+../uvm/tests
++incdir+../uvm/tests/sram_tests
++incdir+../uvm/tests/dma_tests
 
 # 2. RTL Design Files (DUT inside ../rtl/)
 ../rtl/axi_master_rtl/axi_dma_rd.v
@@ -24,12 +27,15 @@
 ../uvm/interfaces/axis_if.sv
 ../uvm/interfaces/dma_desc_if.sv
 
-# 4. UVM VIP & Environment Packages (In Dependency Order)
+# 4. UVM VIP, Environment & Test Packages (In Dependency Order)
 ../uvm/tb_params_pkg.sv
 ../uvm/vip/axi_mm_vip/axi_mm_pkg.sv
 ../uvm/vip/dma_desc_vip/dma_desc_pkg.sv
+../uvm/env/axi_ram_env_pkg.sv
 ../uvm/env/dma_subsystem_env_pkg.sv
-../uvm/tests/axi_test_pkg.sv
+../uvm/sequences/sram_sequences/sram_seq_pkg.sv
+../uvm/tests/sram_tests/sram_test_pkg.sv
+../uvm/tests/dma_tests/dma_test_pkg.sv
 
 # 5. Top-Level Testbench Module
 ../uvm/tb_top.sv

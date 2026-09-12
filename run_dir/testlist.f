@@ -4,8 +4,9 @@
 # Each line defines a test case. Comments (#) and empty lines are ignored.
 # ===============================================================================
 
-# 1. Base Topology Test
-base_test
-
-# 2. Baseline Connectivity & Sanity Tests (RAM Standalone)
+# 1. SRAM Standalone Tests (RAM_STANDALONE)
+sram_base_test
 axi_sanity_test
+
+# 2. DMA Standalone & Subsystem Tests (DMA_STANDALONE & SUBSYSTEM)
+dma_base_test

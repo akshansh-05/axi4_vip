@@ -9,7 +9,8 @@
 `include "uvm_macros.svh"
 import uvm_pkg::*;
 import tb_params_pkg::*;
-import axi_test_pkg::*;
+import sram_test_pkg::*;
+import dma_test_pkg::*;
 
 module tb_top;
 

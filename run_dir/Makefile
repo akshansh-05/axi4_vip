@@ -34,7 +34,9 @@ endif
 # -------------------------------------------------------------------------------
 .PHONY: help setup clean \
         test_ram test_dma test_sys test_all \
-        run_ram gui_ram waves_ram cov_ram report_cov imc_gui
+        run_ram gui_ram waves_ram cov_ram \
+        run_dma cov_dma run_sys cov_sys \
+        report_cov imc_gui
 
 # -------------------------------------------------------------------------------
 # 3. Help Menu
@@ -49,13 +51,16 @@ help:
 	@echo "    make test_sys                  : Test Full Subsystem elaboration"
 	@echo "    make test_all                  : Test all 3 topologies sequentially"
 	@echo ""
-	@echo " 2. TEST EXECUTION (RAM Verification):"
-	@echo "    make run_ram [TEST=<name>]     : Run test in batch mode (dumps waves.shm)"
+	@echo " 2. TEST EXECUTION:"
+	@echo "    make run_ram [TEST=<name>]     : Run RAM test (default: axi_sanity_test)"
+	@echo "    make run_dma [TEST=<name>]     : Run DMA test (default: dma_base_test)"
+	@echo "    make run_sys [TEST=<name>]     : Run Subsystem test (default: dma_base_test)"
 	@echo "    make waves_ram                 : Open generated waves.shm in Cadence SimVision"
 	@echo "    make gui_ram [TEST=<name>]     : Run test with interactive SimVision GUI"
 	@echo ""
 	@echo " 3. COVERAGE & ANALYSIS (Cadence IMC):"
-	@echo "    make cov_ram [TEST=<name>]     : Run simulation with Full Code & Functional Coverage"
+	@echo "    make cov_ram [TEST=<name>]     : Run RAM test with Full Coverage"
+	@echo "    make cov_sys [TEST=<name>]     : Run Subsystem test with Full Coverage"
 	@echo "    make report_cov [TEST=<name>]  : Generate Text & HTML Coverage Reports"
 	@echo "    make imc_gui [TEST=<name>]     : Launch Cadence IMC GUI to inspect coverage database"
 	@echo ""
@@ -85,19 +90,21 @@ test_all: test_ram test_dma test_sys
 	@echo ">>> ALL 3 HARDWARE CONFIGURATIONS COMPILED & ELABORATED SUCCESSFULLY!"
 
 # -------------------------------------------------------------------------------
-# 5. Test Execution (RAM Standalone Mode)
+# 5. Test Execution Targets
 # -------------------------------------------------------------------------------
 run_ram: setup
 	@echo "[XCELIUM] Running RAM Test: $(TEST)"
 	$(XRUN_BASE) +define+RAM_STANDALONE -l $(LOG_DIR)/sim_ram_$(TEST).log
 
 run_dma: setup
-	@echo "[XCELIUM] Running DMA Standalone Test: $(TEST)"
-	$(XRUN_BASE) +define+DMA_STANDALONE -l $(LOG_DIR)/sim_dma_$(TEST).log
+	@$(eval DMA_TEST := $(if $(filter axi_sanity_test,$(TEST)),dma_base_test,$(TEST)))
+	@echo "[XCELIUM] Running DMA Standalone Test: $(DMA_TEST)"
+	$(XRUN_BASE) +define+DMA_STANDALONE +UVM_TESTNAME=$(DMA_TEST) -l $(LOG_DIR)/sim_dma_$(DMA_TEST).log
 
 run_sys: setup
-	@echo "[XCELIUM] Running Subsystem Test: $(TEST)"
-	$(XRUN_BASE) +define+SUBSYSTEM -l $(LOG_DIR)/sim_sys_$(TEST).log
+	@$(eval SYS_TARGET_TEST := $(if $(filter axi_sanity_test,$(TEST)),dma_base_test,$(TEST)))
+	@echo "[XCELIUM] Running Subsystem Test: $(SYS_TARGET_TEST)"
+	$(XRUN_BASE) +define+SUBSYSTEM +UVM_TESTNAME=$(SYS_TARGET_TEST) -l $(LOG_DIR)/sim_sys_$(SYS_TARGET_TEST).log
 
 gui_ram:
 	$(MAKE) run_ram TEST=$(TEST) GUI=1
@@ -110,6 +117,11 @@ waves_ram:
 cov_ram: setup
 	@echo "[XCELIUM] Running RAM Test with Coverage: $(TEST)"
 	$(XRUN_BASE) +define+RAM_STANDALONE -coverage all -covoverwrite -covworkdir ./cov_work -covtest $(TEST) -l $(LOG_DIR)/sim_ram_$(TEST)_cov.log
+
+cov_sys: setup
+	@$(eval SYS_TARGET_TEST := $(if $(filter axi_sanity_test,$(TEST)),dma_base_test,$(TEST)))
+	@echo "[XCELIUM] Running Subsystem Test with Coverage: $(SYS_TARGET_TEST)"
+	$(XRUN_BASE) +define+SUBSYSTEM +UVM_TESTNAME=$(SYS_TARGET_TEST) -coverage all -covoverwrite -covworkdir ./cov_work -covtest $(SYS_TARGET_TEST) -l $(LOG_DIR)/sim_sys_$(SYS_TARGET_TEST)_cov.log
 
 # Clean environment override for VMANAGER2009 IMC (stripping old INCISIVE152 variables)
 IMC_CMD := env -i HOME=$(HOME) USER=$(USER) DISPLAY=$(DISPLAY) \
