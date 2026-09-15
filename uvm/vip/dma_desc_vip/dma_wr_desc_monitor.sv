@@ -21,13 +21,15 @@ class dma_wr_desc_monitor #(
     virtual dma_desc_if #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH) vif;
     cfg_type cfg;
 
-    uvm_analysis_port #(item_type) ap;
+    uvm_analysis_port #(item_type) cmd_ap;
+    uvm_analysis_port #(item_type) status_ap;
 
     `uvm_component_param_utils(dma_wr_desc_monitor #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH))
 
     function new(string name = "dma_wr_desc_monitor", uvm_component parent = null);
         super.new(name, parent);
-        ap = new("ap", this);
+        cmd_ap    = new("cmd_ap", this);
+        status_ap = new("status_ap", this);
     endfunction : new
 
     virtual function void build_phase(uvm_phase phase);
@@ -38,9 +40,67 @@ class dma_wr_desc_monitor #(
         vif = cfg.vif;
     endfunction : build_phase
 
+    item_type pending_cmds[bit [TAG_WIDTH-1:0]];
+
     virtual task run_phase(uvm_phase phase);
-        // Skeleton monitor for topology verification
+        forever begin
+            wait(!vif.rst);
+            fork
+                monitor_cmd();
+                monitor_status();
+            join_none
+            wait(vif.rst);
+            disable fork;
+            pending_cmds.delete();
+        end
     endtask : run_phase
+
+    // Passively samples write descriptor command handshakes (valid && ready)
+    virtual task monitor_cmd();
+        forever begin
+            @(vif.wr_desc_mon_cb);
+            if (vif.wr_desc_mon_cb.write_desc_valid && vif.wr_desc_mon_cb.write_desc_ready) begin
+                item_type item = item_type::type_id::create("wr_desc_cmd_item");
+                item.trans_type = DESC_WRITE;
+                item.addr       = vif.wr_desc_mon_cb.write_desc_addr;
+                item.len        = vif.wr_desc_mon_cb.write_desc_len;
+                item.tag        = vif.wr_desc_mon_cb.write_desc_tag;
+
+                `uvm_info("WR_DESC_MON", $sformatf("Sampled Write Descriptor Command:\n%s", item.sprint()), UVM_MEDIUM)
+                pending_cmds[item.tag] = item;
+                cmd_ap.write(item);
+            end
+        end
+    endtask : monitor_cmd
+
+    // Passively samples write descriptor completion status pulses (status_valid)
+    virtual task monitor_status();
+        forever begin
+            @(vif.wr_desc_mon_cb);
+            if (vif.wr_desc_mon_cb.write_desc_status_valid) begin
+                bit [TAG_WIDTH-1:0] s_tag = vif.wr_desc_mon_cb.write_desc_status_tag;
+                item_type item;
+                if (pending_cmds.exists(s_tag)) begin
+                    item = pending_cmds[s_tag];
+                    pending_cmds.delete(s_tag);
+                end else begin
+                    item = item_type::type_id::create("wr_desc_status_item");
+                    item.trans_type = DESC_WRITE;
+                    item.tag        = s_tag;
+                end
+                item.status_tag   = s_tag;
+                item.status_len   = vif.wr_desc_mon_cb.write_desc_status_len;
+                item.status_id    = vif.wr_desc_mon_cb.write_desc_status_id;
+                item.status_dest  = vif.wr_desc_mon_cb.write_desc_status_dest;
+                item.status_user  = vif.wr_desc_mon_cb.write_desc_status_user;
+                item.status_error = dma_error_e'(vif.wr_desc_mon_cb.write_desc_status_error);
+
+                `uvm_info("WR_DESC_MON", $sformatf("Sampled Write Descriptor Status: tag=0x%02x, len=%0d, error=%s (0x%0x)",
+                          item.status_tag, item.status_len, item.status_error.name(), item.status_error), UVM_MEDIUM)
+                status_ap.write(item);
+            end
+        end
+    endtask : monitor_status
 
 endclass : dma_wr_desc_monitor
 

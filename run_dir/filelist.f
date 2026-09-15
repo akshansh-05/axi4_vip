@@ -34,6 +34,7 @@
 ../uvm/env/axi_ram_env_pkg.sv
 ../uvm/env/dma_subsystem_env_pkg.sv
 ../uvm/sequences/sram_sequences/sram_seq_pkg.sv
+../uvm/sequences/dma_sequences/dma_seq_pkg.sv
 ../uvm/tests/sram_tests/sram_test_pkg.sv
 ../uvm/tests/dma_tests/dma_test_pkg.sv
 

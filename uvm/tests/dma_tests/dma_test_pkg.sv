@@ -13,8 +13,10 @@ package dma_test_pkg;
     import axi_mm_pkg::*;
     import dma_desc_pkg::*;
     import dma_subsystem_env_pkg::*;
+    import dma_seq_pkg::*;
 
     `include "dma_base_test.sv"
+    `include "dma_desc_sanity_test.sv"
 
 endpackage : dma_test_pkg
 

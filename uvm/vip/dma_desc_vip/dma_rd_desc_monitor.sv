@@ -21,13 +21,16 @@ class dma_rd_desc_monitor #(
     virtual dma_desc_if #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH) vif;
     cfg_type cfg;
 
-    uvm_analysis_port #(item_type) ap;
+uvm_analysis_port #(item_type) cmd_ap;    // Broadcasts when command handshakes
+uvm_analysis_port #(item_type) status_ap; // Broadcasts when status completes
+
 
     `uvm_component_param_utils(dma_rd_desc_monitor #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH))
 
     function new(string name = "dma_rd_desc_monitor", uvm_component parent = null);
         super.new(name, parent);
-        ap = new("ap", this);
+        cmd_ap    = new("cmd_ap", this);
+        status_ap = new("status_ap", this);
     endfunction : new
 
     virtual function void build_phase(uvm_phase phase);
@@ -38,9 +41,66 @@ class dma_rd_desc_monitor #(
         vif = cfg.vif;
     endfunction : build_phase
 
+    item_type pending_cmds[bit [TAG_WIDTH-1:0]];
+
     virtual task run_phase(uvm_phase phase);
-        // Skeleton monitor for topology verification
+        forever begin
+            wait(!vif.rst);
+            fork
+                monitor_cmd();
+                monitor_status();
+            join_none
+            wait(vif.rst);
+            disable fork;
+            pending_cmds.delete();
+        end
     endtask : run_phase
+
+    // Passively samples read descriptor command handshakes (valid && ready)
+    virtual task monitor_cmd();
+        forever begin
+            @(vif.rd_desc_mon_cb);
+            if (vif.rd_desc_mon_cb.read_desc_valid && vif.rd_desc_mon_cb.read_desc_ready) begin
+                item_type item = item_type::type_id::create("rd_desc_cmd_item");
+                item.trans_type = DESC_READ;
+                item.addr       = vif.rd_desc_mon_cb.read_desc_addr;
+                item.len        = vif.rd_desc_mon_cb.read_desc_len;
+                item.tag        = vif.rd_desc_mon_cb.read_desc_tag;
+                item.id         = vif.rd_desc_mon_cb.read_desc_id;
+                item.dest       = vif.rd_desc_mon_cb.read_desc_dest;
+                item.user       = vif.rd_desc_mon_cb.read_desc_user;
+
+                `uvm_info("RD_DESC_MON", $sformatf("Sampled Read Descriptor Command:\n%s", item.sprint()), UVM_MEDIUM)
+                pending_cmds[item.tag] = item;
+                cmd_ap.write(item);
+            end
+        end
+    endtask : monitor_cmd
+
+    // Passively samples read descriptor completion status pulses (status_valid)
+    virtual task monitor_status();
+        forever begin
+            @(vif.rd_desc_mon_cb);
+            if (vif.rd_desc_mon_cb.read_desc_status_valid) begin
+                bit [TAG_WIDTH-1:0] s_tag = vif.rd_desc_mon_cb.read_desc_status_tag;
+                item_type item;
+                if (pending_cmds.exists(s_tag)) begin
+                    item = pending_cmds[s_tag];
+                    pending_cmds.delete(s_tag);
+                end else begin
+                    item = item_type::type_id::create("rd_desc_status_item");
+                    item.trans_type = DESC_READ;
+                    item.tag        = s_tag;
+                end
+                item.status_tag   = s_tag;
+                item.status_error = dma_error_e'(vif.rd_desc_mon_cb.read_desc_status_error);
+
+                `uvm_info("RD_DESC_MON", $sformatf("Sampled Read Descriptor Status: tag=0x%02x, error=%s (0x%0x)",
+                          item.status_tag, item.status_error.name(), item.status_error), UVM_MEDIUM)
+                status_ap.write(item);
+            end
+        end
+    endtask : monitor_status
 
 endclass : dma_rd_desc_monitor
 

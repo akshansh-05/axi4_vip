@@ -10,3 +10,4 @@ axi_sanity_test
 
 # 2. DMA Standalone & Subsystem Tests (DMA_STANDALONE & SUBSYSTEM)
 dma_base_test
+dma_desc_sanity_test

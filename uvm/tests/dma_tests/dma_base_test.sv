@@ -61,18 +61,18 @@ class dma_base_test extends uvm_test;
         env = env_type::type_id::create("env", this);
     endfunction : build_phase
 
-    // Default configuration:
-    // Descriptor channels driven actively by testbench.
-    // Internal AXI bus monitored passively (Subsystem Loopback).
-    // Child tests for DMA Standalone can override this to configure AXI agents as Slave Responders.
+    // Default configuration for DMA Standalone verification:
+    // AXI-MM agents act as Active Slave Responders (is_active = UVM_ACTIVE, is_master = 0).
+    // Descriptor channels driven actively by testbench (is_active = UVM_ACTIVE).
+    // Future Subsystem tests can override this virtual method to set AXI agents to UVM_PASSIVE.
     virtual function void configure_agents(
         cfg_type c_wr, cfg_type c_rd,
         dma_cfg_type c_dma_rd, dma_cfg_type c_dma_wr
     );
-        c_wr.is_active     = UVM_PASSIVE;
-        c_wr.is_master     = 1'b0;
-        c_rd.is_active     = UVM_PASSIVE;
-        c_rd.is_master     = 1'b0;
+        c_wr.is_active     = UVM_ACTIVE;
+        c_wr.is_master     = 1'b0; // Active Slave Responder
+        c_rd.is_active     = UVM_ACTIVE;
+        c_rd.is_master     = 1'b0; // Active Slave Responder
         c_dma_rd.is_active = UVM_ACTIVE;
         c_dma_wr.is_active = UVM_ACTIVE;
     endfunction : configure_agents
