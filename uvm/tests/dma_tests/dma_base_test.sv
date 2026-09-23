@@ -11,13 +11,16 @@ class dma_base_test extends uvm_test;
 
     typedef axi_agent_config      #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) cfg_type;
     typedef dma_desc_agent_config #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH) dma_cfg_type;
+    typedef axis_agent_config     #(DATA_WIDTH, STRB_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH) axis_cfg_type;
     typedef dma_subsystem_env     #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH, LEN_WIDTH, TAG_WIDTH, DEST_WIDTH, USER_WIDTH) env_type;
 
-    cfg_type     cfg_wr;
-    cfg_type     cfg_rd;
-    dma_cfg_type cfg_dma_rd;
-    dma_cfg_type cfg_dma_wr;
-    env_type     env;
+    cfg_type      cfg_wr;
+    cfg_type      cfg_rd;
+    dma_cfg_type  cfg_dma_rd;
+    dma_cfg_type  cfg_dma_wr;
+    axis_cfg_type cfg_axis_wr;
+    axis_cfg_type cfg_axis_rd;
+    env_type      env;
 
     `uvm_component_utils(dma_base_test)
 
@@ -29,11 +32,13 @@ class dma_base_test extends uvm_test;
         super.build_phase(phase);
 
         // 1. Create agent configurations
-        cfg_wr     = cfg_type::type_id::create("cfg_wr");
-        cfg_rd     = cfg_type::type_id::create("cfg_rd");
-        cfg_dma_rd = dma_cfg_type::type_id::create("cfg_dma_rd");
-        cfg_dma_wr = dma_cfg_type::type_id::create("cfg_dma_wr");
-        configure_agents(cfg_wr, cfg_rd, cfg_dma_rd, cfg_dma_wr);
+        cfg_wr      = cfg_type::type_id::create("cfg_wr");
+        cfg_rd      = cfg_type::type_id::create("cfg_rd");
+        cfg_dma_rd  = dma_cfg_type::type_id::create("cfg_dma_rd");
+        cfg_dma_wr  = dma_cfg_type::type_id::create("cfg_dma_wr");
+        cfg_axis_wr = axis_cfg_type::type_id::create("cfg_axis_wr");
+        cfg_axis_rd = axis_cfg_type::type_id::create("cfg_axis_rd");
+        configure_agents(cfg_wr, cfg_rd, cfg_dma_rd, cfg_dma_wr, cfg_axis_wr, cfg_axis_rd);
 
         // 2. Fetch AXI virtual interface
         if (!uvm_config_db#(virtual axi_if #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))::get(this, "", "vif_axi", cfg_wr.vif)) begin
@@ -51,30 +56,53 @@ class dma_base_test extends uvm_test;
         end
         cfg_dma_wr.vif = cfg_dma_rd.vif;
 
-        // 4. Set configurations into config_db for environment agents
+        // 4. Fetch AXI-Stream Write virtual interface (DUT s_axis_write_data_*)
+        if (!uvm_config_db#(virtual axis_if #(DATA_WIDTH, STRB_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH))::get(this, "", "vif_axis_wr", cfg_axis_wr.vif)) begin
+            if (!uvm_config_db#(virtual axis_if)::get(this, "", "vif_axis_wr", cfg_axis_wr.vif)) begin
+                `uvm_fatal("DMA_BASE_VIF", "Failed to get vif_axis_wr from config_db")
+            end
+        end
+
+        // 5. Fetch AXI-Stream Read virtual interface (DUT m_axis_read_data_*)
+        if (!uvm_config_db#(virtual axis_if #(DATA_WIDTH, STRB_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH))::get(this, "", "vif_axis_rd", cfg_axis_rd.vif)) begin
+            if (!uvm_config_db#(virtual axis_if)::get(this, "", "vif_axis_rd", cfg_axis_rd.vif)) begin
+                `uvm_fatal("DMA_BASE_VIF", "Failed to get vif_axis_rd from config_db")
+            end
+        end
+
+        // 6. Set configurations into config_db for environment agents
         uvm_config_db#(cfg_type)::set(this, "env.axi_wr_agent*", "cfg", cfg_wr);
         uvm_config_db#(cfg_type)::set(this, "env.axi_rd_agent*", "cfg", cfg_rd);
         uvm_config_db#(dma_cfg_type)::set(this, "env.dma_rd_desc_agent*", "cfg", cfg_dma_rd);
         uvm_config_db#(dma_cfg_type)::set(this, "env.dma_wr_desc_agent*", "cfg", cfg_dma_wr);
+        uvm_config_db#(axis_cfg_type)::set(this, "env.axis_wr_agent*", "cfg", cfg_axis_wr);
+        uvm_config_db#(axis_cfg_type)::set(this, "env.axis_rd_agent*", "cfg", cfg_axis_rd);
 
-        // 5. Create Environment
+        // 7. Create Environment
         env = env_type::type_id::create("env", this);
     endfunction : build_phase
 
-    // Default configuration for DMA Standalone verification:
-    // AXI-MM agents act as Active Slave Responders (is_active = UVM_ACTIVE, is_master = 0).
-    // Descriptor channels driven actively by testbench (is_active = UVM_ACTIVE).
-    // Future Subsystem tests can override this virtual method to set AXI agents to UVM_PASSIVE.
+    // Default configuration:
+    // Descriptor channels driven actively by testbench.
+    // Internal AXI bus monitored passively (Subsystem Loopback).
+    // Stream write driven actively by testbench as Stream Master.
+    // Stream read received actively by testbench as Stream Slave.
+    // Child tests for DMA Standalone can override this to configure AXI agents as Slave Responders.
     virtual function void configure_agents(
         cfg_type c_wr, cfg_type c_rd,
-        dma_cfg_type c_dma_rd, dma_cfg_type c_dma_wr
+        dma_cfg_type c_dma_rd, dma_cfg_type c_dma_wr,
+        axis_cfg_type c_axis_wr, axis_cfg_type c_axis_rd
     );
-        c_wr.is_active     = UVM_ACTIVE;
-        c_wr.is_master     = 1'b0; // Active Slave Responder
-        c_rd.is_active     = UVM_ACTIVE;
-        c_rd.is_master     = 1'b0; // Active Slave Responder
-        c_dma_rd.is_active = UVM_ACTIVE;
-        c_dma_wr.is_active = UVM_ACTIVE;
+        c_wr.is_active      = UVM_PASSIVE;
+        c_wr.is_master      = 1'b0;
+        c_rd.is_active      = UVM_PASSIVE;
+        c_rd.is_master      = 1'b0;
+        c_dma_rd.is_active  = UVM_ACTIVE;
+        c_dma_wr.is_active  = UVM_ACTIVE;
+        c_axis_wr.is_active = UVM_ACTIVE;
+        c_axis_wr.is_master = 1'b1; // Master producing stream into DUT
+        c_axis_rd.is_active = UVM_ACTIVE;
+        c_axis_rd.is_master = 1'b0; // Slave consuming stream from DUT
     endfunction : configure_agents
 
     virtual function void end_of_elaboration_phase(uvm_phase phase);

@@ -12,6 +12,7 @@ package dma_subsystem_env_pkg;
     import tb_params_pkg::*;
     import axi_mm_pkg::*;
     import dma_desc_pkg::*;
+    import axis_pkg::*;
     import axi_ram_env_pkg::*;
 
     `include "dma_subsystem_env.sv"

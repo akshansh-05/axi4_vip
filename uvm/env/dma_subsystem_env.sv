@@ -21,6 +21,8 @@ class dma_subsystem_env #(
     typedef axi_rd_agent      #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) rd_agent_type;
     typedef dma_rd_desc_agent #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH) dma_rd_desc_agent_type;
     typedef dma_wr_desc_agent #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH) dma_wr_desc_agent_type;
+    typedef axis_wr_agent     #(DATA_WIDTH, STRB_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH) axis_wr_agent_type;
+    typedef axis_rd_agent     #(DATA_WIDTH, STRB_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH) axis_rd_agent_type;
     typedef axi_coverage      #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) cov_type;
     // typedef axi_scoreboard #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) scb_type;
 
@@ -28,6 +30,8 @@ class dma_subsystem_env #(
     rd_agent_type          axi_rd_agent;
     dma_rd_desc_agent_type dma_rd_desc_agent;
     dma_wr_desc_agent_type dma_wr_desc_agent;
+    axis_wr_agent_type     axis_wr_agent;
+    axis_rd_agent_type     axis_rd_agent;
     cov_type               cov;
     // scb_type            scb;
 
@@ -43,6 +47,8 @@ class dma_subsystem_env #(
         axi_rd_agent      = rd_agent_type::type_id::create("axi_rd_agent", this);
         dma_rd_desc_agent = dma_rd_desc_agent_type::type_id::create("dma_rd_desc_agent", this);
         dma_wr_desc_agent = dma_wr_desc_agent_type::type_id::create("dma_wr_desc_agent", this);
+        axis_wr_agent     = axis_wr_agent_type::type_id::create("axis_wr_agent", this);
+        axis_rd_agent     = axis_rd_agent_type::type_id::create("axis_rd_agent", this);
         cov               = cov_type::type_id::create("cov", this);
         // scb            = scb_type::type_id::create("scb", this);
     endfunction : build_phase

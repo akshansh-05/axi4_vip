@@ -8,6 +8,7 @@
 +incdir+../uvm/interfaces
 +incdir+../uvm/vip/axi_mm_vip
 +incdir+../uvm/vip/axis_vip
++incdir+../uvm/vip/axis_vip/sequences
 +incdir+../uvm/vip/dma_desc_vip
 +incdir+../uvm/env
 +incdir+../uvm/sequences/sram_sequences
@@ -31,6 +32,7 @@
 ../uvm/tb_params_pkg.sv
 ../uvm/vip/axi_mm_vip/axi_mm_pkg.sv
 ../uvm/vip/dma_desc_vip/dma_desc_pkg.sv
+../uvm/vip/axis_vip/axis_pkg.sv
 ../uvm/env/axi_ram_env_pkg.sv
 ../uvm/env/dma_subsystem_env_pkg.sv
 ../uvm/sequences/sram_sequences/sram_seq_pkg.sv
