@@ -17,7 +17,7 @@ package dma_test_pkg;
     import dma_seq_pkg::*;
 
     `include "dma_base_test.sv"
-    `include "dma_desc_sanity_test.sv"
+    `include "dma_sanity_test.sv"
 
 endpackage : dma_test_pkg
 

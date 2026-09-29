@@ -82,31 +82,37 @@ class dma_base_test extends uvm_test;
         env = env_type::type_id::create("env", this);
     endfunction : build_phase
 
-    // Default configuration:
-    // Descriptor channels driven actively by testbench.
-    // Internal AXI bus monitored passively (Subsystem Loopback).
-    // Stream write driven actively by testbench as Stream Master.
-    // Stream read received actively by testbench as Stream Slave.
-    // Child tests for DMA Standalone can override this to configure AXI agents as Slave Responders.
+    // DMA Standalone configuration:
+    // 1. AXI-MM VIPs: Active Slave Responders (acting as Memory answering the DMA Master)
+    // 2. Descriptor VIPs: Active Masters (driving read/write command channels)
+    // 3. Stream Write VIP: Active Master (producing ingress stream data into DUT)
+    // 4. Stream Read VIP: Active Slave (consuming egress stream data from DUT)
     virtual function void configure_agents(
         cfg_type c_wr, cfg_type c_rd,
         dma_cfg_type c_dma_rd, dma_cfg_type c_dma_wr,
         axis_cfg_type c_axis_wr, axis_cfg_type c_axis_rd
     );
-        c_wr.is_active      = UVM_PASSIVE;
-        c_wr.is_master      = 1'b0;
-        c_rd.is_active      = UVM_PASSIVE;
-        c_rd.is_master      = 1'b0;
-        c_dma_rd.is_active  = UVM_ACTIVE;
-        c_dma_wr.is_active  = UVM_ACTIVE;
-        c_axis_wr.is_active = UVM_ACTIVE;
-        c_axis_wr.is_master = 1'b1; // Master producing stream into DUT
-        c_axis_rd.is_active = UVM_ACTIVE;
-        c_axis_rd.is_master = 1'b0; // Slave consuming stream from DUT
+        // AXI-MM VIPs in Slave Mode (Memory Responders)
+        c_wr.is_active          = UVM_ACTIVE;
+        c_wr.is_master          = 1'b0; // Slave mode
+        c_rd.is_active          = UVM_ACTIVE;
+        c_rd.is_master          = 1'b0; // Slave mode
+
+        // Descriptor VIPs in Master Mode (Command Drivers)
+        c_dma_rd.is_active      = UVM_ACTIVE;
+        c_dma_wr.is_active      = UVM_ACTIVE;
+
+        // AXI-Stream VIPs
+        c_axis_wr.is_active     = UVM_ACTIVE;
+        c_axis_wr.is_master     = 1'b1; // Master producer into DUT
+        c_axis_rd.is_active     = UVM_ACTIVE;
+        c_axis_rd.is_master     = 1'b0; // Slave consumer from DUT
+        c_axis_rd.ready_always_high = 1'b1; // Default to zero-backpressure sink
     endfunction : configure_agents
 
     virtual function void end_of_elaboration_phase(uvm_phase phase);
         super.end_of_elaboration_phase(phase);
+        `uvm_info(get_type_name(), "DMA Standalone Verification Environment Topology", UVM_NONE)
         uvm_top.print_topology();
     endfunction : end_of_elaboration_phase
 

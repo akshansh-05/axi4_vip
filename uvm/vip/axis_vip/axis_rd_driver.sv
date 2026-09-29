@@ -43,7 +43,7 @@ class axis_rd_driver #(
         if (cfg.ready_always_high) begin
             run_always_ready();
         end else begin
-            run_backpressure();
+            run_sequence_driven();
         end
     endtask : run_phase
 
@@ -52,7 +52,7 @@ class axis_rd_driver #(
         vif.slv_drv_cb.tready <= 1'b0;
     endtask : reset_signals
 
-    // Mode 1: TREADY held permanently high — zero backpressure consumer.
+    // Mode 1: TREADY held permanently high - zero backpressure consumer.
     // The DUT can transfer data on every clock cycle without stalling.
     virtual task run_always_ready();
         vif.slv_drv_cb.tready <= 1'b1;
@@ -70,30 +70,31 @@ class axis_rd_driver #(
         end
     endtask : run_always_ready
 
-    // Mode 2: Backpressure consumer — wait for DUT to assert TVALID, then
-    // delay 'default_ready_delay' cycles before asserting TREADY for one cycle.
-    // This models a slow receiver that cannot keep up with the producer.
-    virtual task run_backpressure();
+    // Mode 2: Sequence-driven backpressure mode
+    // Fetches items from sequence to control TREADY timing without making assumptions about DUT state.
+    virtual task run_sequence_driven();
+        req_type req;
+
         forever begin
-            @(vif.slv_drv_cb);
+            seq_item_port.get_next_item(req);
 
-            if (vif.rst) begin
+            // 1. If sequence specified backpressure, deassert TREADY for exact N cycles
+            if (req.ready_delay > 0) begin
                 vif.slv_drv_cb.tready <= 1'b0;
-                wait(!vif.rst);
-                @(vif.slv_drv_cb);
-            end else if (vif.slv_drv_cb.tvalid) begin
-                // DUT is presenting data; apply configurable delay before accepting
-                if (cfg.default_ready_delay > 0) begin
-                    repeat (cfg.default_ready_delay) @(vif.slv_drv_cb);
-                end
-
-                // Pulse TREADY for exactly one clock cycle to complete handshake
-                vif.slv_drv_cb.tready <= 1'b1;
-                @(vif.slv_drv_cb);
-                vif.slv_drv_cb.tready <= 1'b0;
+                repeat (req.ready_delay) @(vif.slv_drv_cb);
             end
+
+            // 2. Assert TREADY and hold it until an ACTUAL protocol handshake occurs
+            vif.slv_drv_cb.tready <= 1'b1;
+            do begin
+                @(vif.slv_drv_cb);
+            end while (!vif.slv_drv_cb.tvalid);
+
+            // 3. Handshake completed on this clock edge; pull TREADY down
+            vif.slv_drv_cb.tready <= 1'b0;
+            seq_item_port.item_done();
         end
-    endtask : run_backpressure
+    endtask : run_sequence_driven
 
 endclass : axis_rd_driver
 

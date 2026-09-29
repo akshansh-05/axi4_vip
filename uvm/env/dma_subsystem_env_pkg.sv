@@ -15,6 +15,7 @@ package dma_subsystem_env_pkg;
     import axis_pkg::*;
     import axi_ram_env_pkg::*;
 
+    `include "dma_coverage.sv"
     `include "dma_subsystem_env.sv"
 
 endpackage : dma_subsystem_env_pkg

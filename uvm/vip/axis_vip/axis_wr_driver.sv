@@ -75,7 +75,7 @@ class axis_wr_driver #(
             // Drive beat payload and attributes
             vif.mst_drv_cb.tdata  <= item.data[i];
             vif.mst_drv_cb.tkeep  <= (item.keep.size() > i) ? item.keep[i] : {KEEP_WIDTH{1'b1}};
-            vif.mst_drv_cb.tlast  <= (i == num_beats - 1) ? item.last : 1'b0;
+            vif.mst_drv_cb.tlast  <= (i == num_beats - 1);
             vif.mst_drv_cb.tid    <= item.id;
             vif.mst_drv_cb.tdest  <= item.dest;
             vif.mst_drv_cb.tuser  <= (item.user.size() > i) ? item.user[i] : '0;

@@ -90,7 +90,6 @@ class axis_wr_monitor #(
 
         item.id   = captured_id;
         item.dest = captured_dest;
-        item.last = 1'b1;
 
         `uvm_info(get_type_name(), $sformatf("Collected write stream packet: %0d beats, ID=0x%0x, DEST=0x%0x",
                   item.data.size(), item.id, item.dest), UVM_HIGH)
