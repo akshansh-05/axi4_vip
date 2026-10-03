@@ -94,6 +94,9 @@ class axi_rd_monitor #(
             txn.rid   = new[desc.len + 1];
 
             beat_idx = 0;
+            // Architectural Note: This monitor collects transactions strictly on accepted handshakes
+            // (rvalid && rready). It purposefully omits cycle-level latency/delay variables when RREADY
+            // is driven low by the DUT master; downstream receiver backpressure is tracked at the AXI-Stream VIP.
             while (beat_idx <= desc.len) begin
                 @(vif.rd_mon_cb);
                 if (vif.rd_mon_cb.rvalid && vif.rd_mon_cb.rready) begin

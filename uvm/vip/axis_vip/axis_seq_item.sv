@@ -37,15 +37,16 @@ class axis_seq_item #(
         delay.size() == data.size();
     }
 
-constraint c_keep_default {
-    foreach (keep[i]) {
-        if (i < data.size() - 1) {
-            keep[i] == {KEEP_WIDTH{1'b1}}; // Standard: All middle beats are full 4'b1111
-        } else {
-            keep[i] != {KEEP_WIDTH{1'b0}}; // Standard: Last beat has at least 1 active byte
+    constraint c_keep_default {
+        foreach (keep[i]) {
+            if (i < data.size() - 1) {
+                keep[i] == {KEEP_WIDTH{1'b1}}; // All middle beats must have all lanes active
+            } else {
+                // ARM AXI-Stream Sec 2.4.1 Continuous Byte Stream: Must start at lane 0 without holes
+                keep[i] inside {4'b0001, 4'b0011, 4'b0111, 4'b1111};
+            }
         }
     }
-}
 
     constraint c_default_delays {
         foreach (delay[i]) {
