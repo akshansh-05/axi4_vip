@@ -20,9 +20,9 @@ package axis_pkg;
     `include "axis_rd_agent.sv"
 
     // Sequence library
-    `include "axis_base_seq.sv"
-    `include "axis_packet_seq.sv"
-    `include "axis_slave_rx_seq.sv"
+    `include "sequences/axis_base_seq.sv"
+    `include "sequences/axis_packet_seq.sv"
+    `include "sequences/axis_slave_rx_seq.sv"
 
 endpackage : axis_pkg
 
