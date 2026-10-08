@@ -14,9 +14,10 @@ class axis_packet_seq #(
 ) extends axis_base_seq #(DATA_WIDTH, KEEP_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH);
 
     // Sequence configuration knobs
-    int unsigned num_packets = 1;       // Number of packets to generate
-    int unsigned min_beats   = 1;       // Minimum beats per packet
-    int unsigned max_beats   = 16;      // Maximum beats per packet
+    int unsigned num_packets          = 1;       // Number of packets to generate
+    int unsigned min_beats            = 1;       // Minimum beats per packet
+    int unsigned max_beats            = 16;      // Maximum beats per packet
+    bit          force_full_last_keep = 0;       // Force last beat TKEEP to all 1s (full word)
 
     `uvm_object_param_utils(axis_packet_seq #(DATA_WIDTH, KEEP_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH))
 
@@ -34,6 +35,9 @@ class axis_packet_seq #(
 
             assert(pkt.randomize() with {
                 data.size() inside {[min_beats:max_beats]};
+                if (force_full_last_keep) {
+                    keep[data.size()-1] == {KEEP_WIDTH{1'b1}};
+                }
             }) else `uvm_error(get_type_name(), "Randomization failed for axis_packet_seq");
 
             `uvm_info(get_type_name(), $sformatf("Sending packet [%0d/%0d]:\n%s",

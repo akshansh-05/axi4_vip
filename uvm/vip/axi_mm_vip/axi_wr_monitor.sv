@@ -2,6 +2,17 @@
 // Dedicated UVM Monitor for AXI4 Memory-Mapped Write Channels (AW, W, B).
 // Passively snoops AW, W, and B channels strictly through wr_mon_cb clocking block,
 // reconstructs complete burst transactions, and broadcasts them via analysis port.
+//
+// Signal Direction Boundaries (DMA Master topology):
+//   DUT Master outputs → AW channel (AWID, AWADDR, AWLEN, AWSIZE, AWBURST, AWVALID)
+//                        W  channel (WDATA, WSTRB, WLAST, WVALID)
+//                        B  channel (BREADY)
+//   Responder Slave outputs → AW channel (AWREADY)
+//                             W  channel (WREADY)
+//                             B  channel (BID, BRESP, BVALID)
+//
+// Protocol checks in this monitor validate DUT-driven signals (especially WLAST).
+// Responder-driven checks (BID match) are labeled as TB sanity checks.
 
 `ifndef AXI_WR_MONITOR_SV
 `define AXI_WR_MONITOR_SV
@@ -112,6 +123,11 @@ class axi_wr_monitor #(
         end
     endtask : collect_b_channel
 
+    // Assemble a complete write transaction from AW + W beats + B response.
+    //
+    // Published axi_seq_item field ownership for scoreboard/predictor:
+    //   DUT-driven (checkable):  addr, len, size, burst, id, data[], strb[], WLAST framing
+    //   Responder-driven (TB):   bid, bresp
     virtual task assemble_write_transactions();
         item_type txn;
         addr_desc_t desc;
@@ -138,6 +154,15 @@ class axi_wr_monitor #(
                     w_beat_t beat = w_q.pop_front();
                     txn.data[i] = beat.data;
                     txn.strb[i] = beat.strb;
+
+                    // DUT-output protocol check: WLAST framing (AXI4 A3.4.1)
+                    // WLAST is driven by the DMA master — a framing violation is a real DUT bug.
+                    if (beat.last && i != desc.len)
+                        `uvm_error("WR_MON", $sformatf("[DUT] Premature WLAST at beat %0d of %0d beats (AWID=0x%0h, AWADDR=0x%04h)",
+                                   i, desc.len + 1, desc.id, desc.addr))
+                    if (!beat.last && i == desc.len)
+                        `uvm_error("WR_MON", $sformatf("[DUT] Missing WLAST on expected final beat %0d (AWID=0x%0h, AWADDR=0x%04h)",
+                                   desc.len, desc.id, desc.addr))
                 end
             end
 
@@ -145,6 +170,13 @@ class axi_wr_monitor #(
             resp = b_q.pop_front();
             txn.bid   = resp.id;
             txn.bresp = resp.bresp;
+
+            // Responder sanity check: BID should match AWID.
+            // BID is driven by the TB slave responder, not the DUT. A mismatch here
+            // indicates a TB/responder bug, not a DUT bug.
+            if (resp.id !== desc.id)
+                `uvm_error("WR_MON", $sformatf("[RESPONDER] BID mismatch: expected AWID=0x%0h, got BID=0x%0h (AWADDR=0x%04h)",
+                           desc.id, resp.id, desc.addr))
 
             `uvm_info("WR_MON", $sformatf("[WRITE COMPLETE] id=0x%0h addr=0x%04h len=%0d beats bresp=2'b%0b",
                       txn.id, txn.addr, txn.len + 1, txn.bresp), UVM_LOW)

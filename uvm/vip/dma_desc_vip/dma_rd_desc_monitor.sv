@@ -21,8 +21,8 @@ class dma_rd_desc_monitor #(
     virtual dma_desc_if #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH) vif;
     cfg_type cfg;
 
-uvm_analysis_port #(item_type) cmd_ap;    // Broadcasts when command handshakes
-uvm_analysis_port #(item_type) status_ap; // Broadcasts when status completes
+    uvm_analysis_port #(item_type) cmd_ap;    // Broadcasts when command handshakes
+    uvm_analysis_port #(item_type) status_ap; // Broadcasts when status completes
 
 
     `uvm_component_param_utils(dma_rd_desc_monitor #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH))
@@ -46,61 +46,78 @@ uvm_analysis_port #(item_type) status_ap; // Broadcasts when status completes
     virtual task run_phase(uvm_phase phase);
         forever begin
             wait(!vif.rst);
-            fork
-                monitor_cmd();
-                monitor_status();
-            join_none
-            wait(vif.rst);
-            disable fork;
+            while (!vif.rst) begin
+                @(vif.rd_desc_mon_cb);
+                if (!vif.rst) begin
+                    // Retire the completed command before processing a command
+                    // accepted on the same edge with a reused tag.
+                    if (vif.rd_desc_mon_cb.read_desc_status_valid) begin
+                        process_status();
+                    end
+                    if (vif.rd_desc_mon_cb.read_desc_valid &&
+                        vif.rd_desc_mon_cb.read_desc_ready) begin
+                        process_cmd();
+                    end
+                end
+            end
             pending_cmds.delete();
         end
     endtask : run_phase
 
     // Passively samples read descriptor command handshakes (valid && ready)
-    virtual task monitor_cmd();
-        forever begin
-            @(vif.rd_desc_mon_cb);
-            if (vif.rd_desc_mon_cb.read_desc_valid && vif.rd_desc_mon_cb.read_desc_ready) begin
-                item_type item = item_type::type_id::create("rd_desc_cmd_item");
-                item.trans_type = DESC_READ;
-                item.addr       = vif.rd_desc_mon_cb.read_desc_addr;
-                item.len        = vif.rd_desc_mon_cb.read_desc_len;
-                item.tag        = vif.rd_desc_mon_cb.read_desc_tag;
-                item.id         = vif.rd_desc_mon_cb.read_desc_id;
-                item.dest       = vif.rd_desc_mon_cb.read_desc_dest;
-                item.user       = vif.rd_desc_mon_cb.read_desc_user;
+    virtual function void process_cmd();
+        item_type item;
+        item_type cmd_snapshot;
 
-                `uvm_info("RD_DESC_MON", $sformatf("Sampled Read Descriptor Command:\n%s", item.sprint()), UVM_MEDIUM)
-                pending_cmds[item.tag] = item;
-                cmd_ap.write(item);
-            end
+        item = item_type::type_id::create("rd_desc_cmd_item");
+        item.trans_type = DESC_READ;
+        item.addr       = vif.rd_desc_mon_cb.read_desc_addr;
+        item.len        = vif.rd_desc_mon_cb.read_desc_len;
+        item.tag        = vif.rd_desc_mon_cb.read_desc_tag;
+        item.id         = vif.rd_desc_mon_cb.read_desc_id;
+        item.dest       = vif.rd_desc_mon_cb.read_desc_dest;
+        item.user       = vif.rd_desc_mon_cb.read_desc_user;
+
+        `uvm_info("RD_DESC_MON", $sformatf("Sampled Read Descriptor Command:\n%s", item.sprint()), UVM_MEDIUM)
+
+        if (pending_cmds.exists(item.tag)) begin
+            `uvm_error("RD_DESC_MON", $sformatf("Duplicate outstanding command tag detected: tag=0x%02x is already pending!", item.tag))
+        end else begin
+            pending_cmds[item.tag] = item;
         end
-    endtask : monitor_cmd
+
+        if (!$cast(cmd_snapshot, item.clone())) begin
+            `uvm_fatal("RD_DESC_MON", "Failed to clone read descriptor command item")
+        end else if (cmd_snapshot == null) begin
+            `uvm_fatal("RD_DESC_MON", "Clone returned a null read descriptor command item")
+        end else begin
+            cmd_ap.write(cmd_snapshot);
+        end
+    endfunction : process_cmd
 
     // Passively samples read descriptor completion status pulses (status_valid)
-    virtual task monitor_status();
-        forever begin
-            @(vif.rd_desc_mon_cb);
-            if (vif.rd_desc_mon_cb.read_desc_status_valid) begin
-                bit [TAG_WIDTH-1:0] s_tag = vif.rd_desc_mon_cb.read_desc_status_tag;
-                item_type item;
-                if (pending_cmds.exists(s_tag)) begin
-                    item = pending_cmds[s_tag];
-                    pending_cmds.delete(s_tag);
-                end else begin
-                    item = item_type::type_id::create("rd_desc_status_item");
-                    item.trans_type = DESC_READ;
-                    item.tag        = s_tag;
-                end
-                item.status_tag   = s_tag;
-                item.status_error = dma_error_e'(vif.rd_desc_mon_cb.read_desc_status_error);
+    virtual function void process_status();
+        bit [TAG_WIDTH-1:0] s_tag;
+        item_type item;
 
-                `uvm_info("RD_DESC_MON", $sformatf("Sampled Read Descriptor Status: tag=0x%02x, error=%s (0x%0x)",
-                          item.status_tag, item.status_error.name(), item.status_error), UVM_MEDIUM)
-                status_ap.write(item);
-            end
+        s_tag = vif.rd_desc_mon_cb.read_desc_status_tag;
+        if (pending_cmds.exists(s_tag)) begin
+            item = pending_cmds[s_tag];
+            pending_cmds.delete(s_tag);
+        end else begin
+            `uvm_error("RD_DESC_MON", $sformatf("Received status for tag 0x%02x with no matching pending command!", s_tag))
+            item = item_type::type_id::create("rd_desc_status_item");
+            item.trans_type = DESC_READ;
+            item.tag        = s_tag;
         end
-    endtask : monitor_status
+
+        item.status_tag   = s_tag;
+        item.status_error = dma_error_e'(vif.rd_desc_mon_cb.read_desc_status_error);
+
+        `uvm_info("RD_DESC_MON", $sformatf("Sampled Read Descriptor Status: tag=0x%02x, error=%s (0x%0x)",
+                  item.status_tag, item.status_error.name(), item.status_error), UVM_MEDIUM)
+        status_ap.write(item);
+    endfunction : process_status
 
 endclass : dma_rd_desc_monitor
 

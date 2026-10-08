@@ -4,11 +4,11 @@
 # Description: Cadence Xcelium Test Runner driven by testlist.f
 #
 # Usage:
-#   ./run_cmd.sh                          (Runs default active test from testlist.f)
-#   ./run_cmd.sh <test_name>              (Runs specific test, e.g. ./run_cmd.sh axi_sanity_test)
+#   ./run_cmd.sh                          (Runs default active test; coverage always collected)
+#   ./run_cmd.sh <test_name>              (Runs specific test with full coverage automatically)
 #   ./run_cmd.sh <test_name> -gui         (Runs specific test with SimVision GUI)
-#   ./run_cmd.sh <test_name> -cov         (Runs with functional/code coverage collection)
 #   ./run_cmd.sh -report [test_name]      (Generates HTML coverage report using Cadence IMC)
+#   ./run_cmd.sh -imcgui [test_name]      (Launches interactive Cadence IMC coverage GUI)
 #   ./run_cmd.sh -list                    (Lists all tests registered in testlist.f)
 #   ./run_cmd.sh -all                     (Runs ALL active tests in testlist.f)
 #   ./run_cmd.sh -clean                   (Cleans work libraries, logs, and coverage)
@@ -19,9 +19,10 @@ WAVES_TCL="waves.tcl"
 FILELIST="filelist.f"
 
 MODE="ram"
+MODE_EXPLICIT=0
 TEST=""
 GUI=""
-COV=""
+COV="ENABLE"
 GEN_REPORT=0
 VERBOSITY="UVM_MEDIUM"
 SEED="random"
@@ -73,8 +74,8 @@ generate_coverage_report() {
     echo "==============================================================================="
 
     if [[ ! -d "cov_work" ]]; then
-        echo "[ERROR] 'cov_work' directory not found. Please run tests with '-cov' flag first:"
-        echo "        ./run_cmd.sh $target_test -cov"
+        echo "[ERROR] 'cov_work' directory not found. Please run a test first to collect coverage:"
+        echo "        ./run_cmd.sh $target_test"
         exit 1
     fi
 
@@ -118,8 +119,8 @@ launch_imc_gui() {
     echo "==============================================================================="
 
     if [[ ! -d "cov_work" ]]; then
-        echo "[ERROR] 'cov_work' directory not found. Please run tests with '-cov' flag first:"
-        echo "        ./run_cmd.sh $target_test -cov"
+        echo "[ERROR] 'cov_work' directory not found. Please run a test first to collect coverage:"
+        echo "        ./run_cmd.sh $target_test"
         exit 1
     fi
 
@@ -148,6 +149,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -mode)
             MODE="$2"
+            MODE_EXPLICIT=1
             shift 2
             ;;
         -gui)
@@ -156,6 +158,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -cov|-coverage)
             COV="ENABLE"
+            shift
+            ;;
+        -nocov)
+            COV="DISABLE"
             shift
             ;;
         -report|-html)
@@ -193,13 +199,12 @@ while [[ $# -gt 0 ]]; do
             echo "   ./run_cmd.sh [test_name] [options]"
             echo ""
             echo " Options:"
-            echo "   ./run_cmd.sh                      Run default test from $TESTLIST_FILE"
-            echo "   ./run_cmd.sh <test_name>          Run specific test"
+            echo "   ./run_cmd.sh                      Run default test (Coverage always enabled)"
+            echo "   ./run_cmd.sh <test_name>          Run specific test (Coverage always enabled)"
             echo "   ./run_cmd.sh <test_name> -gui     Run with SimVision Waveform GUI"
-            echo "   ./run_cmd.sh <test_name> -cov     Run with Functional Coverage enabled"
             echo "   ./run_cmd.sh -report [test_name]  Generate HTML coverage report via IMC"
             echo "   ./run_cmd.sh -imcgui [test_name]  Launch interactive Cadence IMC GUI"
-            echo "   ./run_cmd.sh -all                 Run all active tests in $TESTLIST_FILE"
+            echo "   ./run_cmd.sh -all                 Run all active tests (Coverage collected for each)"
             echo "   ./run_cmd.sh -list                List registered tests in $TESTLIST_FILE"
             echo "   ./run_cmd.sh -clean               Clean simulation logs and databases"
             echo "==============================================================================="
@@ -223,22 +228,11 @@ fi
 
 mkdir -p logs
 
-# Set topology define macro
-case $MODE in
-    ram|RAM)
-        DEFINE_MACRO="+define+RAM_STANDALONE"
-        ;;
-    dma|DMA)
-        DEFINE_MACRO="+define+DMA_STANDALONE"
-        ;;
-    sys|SYS|subsystem)
-        DEFINE_MACRO="+define+SUBSYSTEM"
-        ;;
-    *)
-        echo "[ERROR] Unknown mode '$MODE'. Use -mode ram, -mode dma, or -mode sys."
-        exit 1
-        ;;
-esac
+# Auto-link ../../axi4_rtl to ../rtl if needed
+if [[ ! -d "../rtl" && -d "../../axi4_rtl" ]]; then
+    echo "[INFO] Auto-linking ../../axi4_rtl to ../rtl"
+    ln -sf ../../axi4_rtl ../rtl 2>/dev/null || true
+fi
 
 # Check for waves.tcl
 INPUT_TCL=""
@@ -249,23 +243,51 @@ fi
 # Function to run a single test
 run_single_test() {
     local t_name="$1"
-    local log_file="logs/sim_${MODE}_${t_name}.log"
+    local t_mode="$MODE"
+
+    # Auto-detect topology mode from test prefix if not explicitly specified
+    if [[ $MODE_EXPLICIT -eq 0 ]]; then
+        if [[ "$t_name" =~ ^dma_ ]]; then
+            t_mode="sys"
+        else
+            t_mode="ram"
+        fi
+    fi
+
+    local def_macro="+define+RAM_STANDALONE"
+    case $t_mode in
+        ram|RAM)
+            def_macro="+define+RAM_STANDALONE"
+            ;;
+        dma|DMA)
+            def_macro="+define+DMA_STANDALONE"
+            ;;
+        sys|SYS|subsystem)
+            def_macro="+define+SUBSYSTEM"
+            ;;
+        *)
+            echo "[ERROR] Unknown mode '$t_mode'. Use -mode ram, -mode dma, or -mode sys."
+            exit 1
+            ;;
+    esac
+
+    local log_file="logs/sim_${t_mode}_${t_name}.log"
 
     echo "==============================================================================="
-    echo " [RUNNING TEST] : $t_name  (Mode: $MODE)"
+    echo " [RUNNING TEST] : $t_name  (Topology: $t_mode)"
     echo "==============================================================================="
 
     local cov_flags=""
     if [[ "$COV" == "ENABLE" ]]; then
         cov_flags="-coverage all -covoverwrite -covworkdir ./cov_work -covtest $t_name"
-        echo "[INFO] Coverage collection enabled (Target: ./cov_work/scope/$t_name)"
+        echo "[INFO] Coverage collection active (Target: ./cov_work/scope/$t_name)"
     fi
 
     local cmd="xrun -64bit -sv -uvm \
          -timescale 1ns/1ns \
          -access +rwc \
          -svseed $SEED \
-         $DEFINE_MACRO \
+         $def_macro \
          +UVM_TESTNAME=$t_name \
          +UVM_VERBOSITY=$VERBOSITY \
          $INPUT_TCL \

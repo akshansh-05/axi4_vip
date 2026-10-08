@@ -57,9 +57,10 @@ class dma_sanity_test extends dma_base_test;
         wr_desc_seq.xfer_tag   = 8'h02;
 
         axis_pkt_seq = axis_pkt_seq_type::type_id::create("axis_pkt_seq");
-        axis_pkt_seq.num_packets = 1;
-        axis_pkt_seq.min_beats   = 16;
-        axis_pkt_seq.max_beats   = 16;
+        axis_pkt_seq.num_packets          = 1;
+        axis_pkt_seq.min_beats            = 16;
+        axis_pkt_seq.max_beats            = 16;
+        axis_pkt_seq.force_full_last_keep = 1'b1; // Guarantee all 4 byte lanes on final beat (exactly 64 bytes)
 
         fork
             begin

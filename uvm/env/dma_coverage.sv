@@ -75,6 +75,12 @@ class dma_coverage #(
     // Concurrency state tracking (Feature 3 Full-Duplex)
     bit                  mm2s_in_flight;
     bit                  s2mm_in_flight;
+    bit                  concurrent_window_active;
+    bit                  concurrent_window_complete;
+    bit                  mm2s_window_done;
+    bit                  s2mm_window_done;
+    bit                  mm2s_window_err;
+    bit                  s2mm_window_err;
     int                  concurrent_rd_len_cat;
     int                  concurrent_wr_len_cat;
     bit                  concurrent_rd_cross_4kb;
@@ -607,7 +613,7 @@ class dma_coverage #(
         cross_dual_4kb_crossing : cross cp_rd_cross_4kb, cp_wr_cross_4kb;
 
         // Concurrent Fault Isolation (Scenario 3.4)
-        cp_concurrent_fault_isolation : coverpoint concurrent_error_status iff (s2mm_in_flight && mm2s_in_flight) {
+        cp_concurrent_fault_isolation : coverpoint concurrent_error_status iff (concurrent_window_complete) {
             bins both_clean      = {2'b00}; // Both completed OKAY
             bins rd_err_wr_clean = {2'b01}; // MM2S hit SLVERR/DECERR, S2MM completed OKAY
             bins wr_err_rd_clean = {2'b10}; // S2MM hit SLVERR/DECERR, MM2S completed OKAY
@@ -662,6 +668,11 @@ class dma_coverage #(
         mm2s_in_flight  = 1'b1;
         concurrent_rd_len_cat   = (t.len <= 64) ? 0 : (t.len <= 4096) ? 1 : 2;
         concurrent_rd_cross_4kb = ((t.addr[11:0] + t.len) > 4096);
+        if (s2mm_in_flight) begin
+            concurrent_window_active = 1'b1;
+            mm2s_window_done         = 1'b0;
+            s2mm_window_done         = 1'b0;
+        end
         cg_dma_rd_desc.sample();
         cg_dma_concurrency.sample();
     endfunction : write_dma_rd_cmd
@@ -671,11 +682,20 @@ class dma_coverage #(
         this.txn_rd_status = t;
         cg_dma_rd_desc_status.sample();
 
-        if (s2mm_in_flight) begin
-            bit rd_err = (t.status_error != DMA_ERR_NONE);
-            bit wr_err = (txn_wr_status != null && txn_wr_status.status_error != DMA_ERR_NONE);
-            concurrent_error_status = {wr_err, rd_err};
-            cg_dma_concurrency.sample();
+        if (concurrent_window_active) begin
+            mm2s_window_done = 1'b1;
+            mm2s_window_err  = (t.status_error != DMA_ERR_NONE);
+            if (s2mm_window_done) begin
+                // Both concurrent transfers have now completed; sample true paired results
+                concurrent_error_status    = {s2mm_window_err, mm2s_window_err};
+                concurrent_window_complete = 1'b1;
+                cg_dma_concurrency.sample();
+                // Close and reset the concurrent window
+                concurrent_window_active   = 1'b0;
+                concurrent_window_complete = 1'b0;
+                mm2s_window_done           = 1'b0;
+                s2mm_window_done           = 1'b0;
+            end
         end
         mm2s_in_flight = 1'b0;
     endfunction : write_dma_rd_status
@@ -686,6 +706,11 @@ class dma_coverage #(
         s2mm_in_flight  = 1'b1;
         concurrent_wr_len_cat   = (t.len <= 64) ? 0 : (t.len <= 4096) ? 1 : 2;
         concurrent_wr_cross_4kb = ((t.addr[11:0] + t.len) > 4096);
+        if (mm2s_in_flight) begin
+            concurrent_window_active = 1'b1;
+            mm2s_window_done         = 1'b0;
+            s2mm_window_done         = 1'b0;
+        end
         cg_dma_wr_desc.sample();
         cg_dma_concurrency.sample();
     endfunction : write_dma_wr_cmd
@@ -695,11 +720,20 @@ class dma_coverage #(
         this.txn_wr_status = t;
         cg_dma_wr_desc_status.sample();
 
-        if (mm2s_in_flight) begin
-            bit wr_err = (t.status_error != DMA_ERR_NONE);
-            bit rd_err = (txn_rd_status != null && txn_rd_status.status_error != DMA_ERR_NONE);
-            concurrent_error_status = {wr_err, rd_err};
-            cg_dma_concurrency.sample();
+        if (concurrent_window_active) begin
+            s2mm_window_done = 1'b1;
+            s2mm_window_err  = (t.status_error != DMA_ERR_NONE);
+            if (mm2s_window_done) begin
+                // Both concurrent transfers have now completed; sample true paired results
+                concurrent_error_status    = {s2mm_window_err, mm2s_window_err};
+                concurrent_window_complete = 1'b1;
+                cg_dma_concurrency.sample();
+                // Close and reset the concurrent window
+                concurrent_window_active   = 1'b0;
+                concurrent_window_complete = 1'b0;
+                mm2s_window_done           = 1'b0;
+                s2mm_window_done           = 1'b0;
+            end
         end
         s2mm_in_flight = 1'b0;
     endfunction : write_dma_wr_status

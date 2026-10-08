@@ -2,6 +2,16 @@
 // Dedicated UVM Monitor for AXI4 Memory-Mapped Read Channels (AR, R).
 // Passively snoops AR and R channels strictly through rd_mon_cb clocking block,
 // reconstructs complete burst transactions, and broadcasts them via analysis port.
+//
+// Signal Direction Boundaries (DMA Master topology):
+//   DUT Master outputs → AR channel (ARID, ARADDR, ARLEN, ARSIZE, ARBURST, ARVALID)
+//                        R  channel (RREADY)
+//   Responder Slave outputs → AR channel (ARREADY)
+//                             R  channel (RID, RDATA, RRESP, RLAST, RVALID)
+//
+// Protocol checks: RLAST and RID are responder-driven signals. Framing checks
+// on these catch TB/slave bugs, not DUT bugs. DUT-checkable outputs from the
+// read path are limited to the AR channel fields.
 
 `ifndef AXI_RD_MONITOR_SV
 `define AXI_RD_MONITOR_SV
@@ -72,6 +82,11 @@ class axi_rd_monitor #(
         end
     endtask : collect_ar_channel
 
+    // Collect R-channel beats and assemble into a complete read transaction.
+    //
+    // Published axi_seq_item field ownership for scoreboard/predictor:
+    //   DUT-driven (checkable):  addr, len, size, burst, id (from AR channel)
+    //   Responder-driven (TB):   data[], rresp[], rid[], RLAST framing
     virtual task collect_r_channel_and_assemble();
         item_type txn;
         addr_desc_t desc;
@@ -104,10 +119,25 @@ class axi_rd_monitor #(
                     txn.rresp[beat_idx] = vif.rd_mon_cb.rresp;
                     txn.rid[beat_idx]   = vif.rd_mon_cb.rid;
 
+                    // Responder sanity check: RLAST framing
+                    // RLAST is driven by the TB slave responder, not the DUT master.
+                    // A framing violation here indicates a TB/slave bug.
                     if (vif.rd_mon_cb.rlast && (beat_idx != desc.len)) begin
-                        `uvm_error("RD_MON", $sformatf("Premature RLAST at beat %0d of %0d beats",
-                                   beat_idx, desc.len + 1))
+                        `uvm_error("RD_MON", $sformatf("[RESPONDER] Premature RLAST at beat %0d of %0d beats (ARID=0x%0h, ARADDR=0x%04h)",
+                                   beat_idx, desc.len + 1, desc.id, desc.addr))
                     end
+                    if (!vif.rd_mon_cb.rlast && (beat_idx == desc.len)) begin
+                        `uvm_error("RD_MON", $sformatf("[RESPONDER] Missing RLAST on expected final beat %0d (ARID=0x%0h, ARADDR=0x%04h)",
+                                   desc.len, desc.id, desc.addr))
+                    end
+
+                    // Responder sanity check: RID should match ARID.
+                    // RID is driven by the TB slave. A mismatch indicates a TB/slave bug.
+                    if (vif.rd_mon_cb.rid !== desc.id) begin
+                        `uvm_error("RD_MON", $sformatf("[RESPONDER] RID mismatch at beat %0d: expected ARID=0x%0h, got RID=0x%0h (ARADDR=0x%04h)",
+                                   beat_idx, desc.id, vif.rd_mon_cb.rid, desc.addr))
+                    end
+
                     beat_idx++;
                 end
             end
