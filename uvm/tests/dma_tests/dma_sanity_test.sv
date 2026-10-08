@@ -25,9 +25,9 @@ class dma_sanity_test extends dma_base_test;
         wr_desc_seq_type  wr_desc_seq;
         axis_pkt_seq_type axis_pkt_seq;
 
-        phase.raise_objection(this, "Starting DMA Standalone Sanity Test");
+        phase.raise_objection(this, "Starting DMA Sanity Test");
 
-        `uvm_info(get_type_name(), "Starting DMA Standalone Sanity Test", UVM_LOW)
+        `uvm_info(get_type_name(), "Starting DMA Sanity Test", UVM_LOW)
 
         // Phase 1: MM2S Read Transfer (Memory -> Stream)
         // Issue a read descriptor for 64 bytes (16 beats of 4 bytes) at address 0x1000.
@@ -77,9 +77,9 @@ class dma_sanity_test extends dma_base_test;
 
         // End of test drain
         #500;
-        `uvm_info(get_type_name(), "DMA Standalone Sanity Test PASSED", UVM_LOW)
+        `uvm_info(get_type_name(), "DMA Sanity Test PASSED", UVM_LOW)
 
-        phase.drop_objection(this, "Completed DMA Standalone Sanity Test");
+        phase.drop_objection(this, "Completed DMA Sanity Test");
     endtask : run_phase
 
 endclass : dma_sanity_test

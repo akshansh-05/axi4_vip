@@ -22,6 +22,8 @@ class dma_base_test extends uvm_test;
     axis_cfg_type cfg_axis_rd;
     env_type      env;
 
+    bit           is_standalone_dma;
+
     `uvm_component_utils(dma_base_test)
 
     function new(string name = "dma_base_test", uvm_component parent = null);
@@ -82,8 +84,10 @@ class dma_base_test extends uvm_test;
         env = env_type::type_id::create("env", this);
     endfunction : build_phase
 
-    // DMA Standalone configuration:
-    // 1. AXI-MM VIPs: Active Slave Responders (acting as Memory answering the DMA Master)
+    // Verification Agent Configuration:
+    // 1. AXI-MM VIPs:
+    //    - Subsystem Mode (default): PASSIVE MONITORS (RTL axi_ram is active responder on bus)
+    //    - DMA Standalone Mode: ACTIVE SLAVE RESPONDERS (VIP acts as memory responder)
     // 2. Descriptor VIPs: Active Masters (driving read/write command channels)
     // 3. Stream Write VIP: Active Master (producing ingress stream data into DUT)
     // 4. Stream Read VIP: Active Slave (consuming egress stream data from DUT)
@@ -92,11 +96,29 @@ class dma_base_test extends uvm_test;
         dma_cfg_type c_dma_rd, dma_cfg_type c_dma_wr,
         axis_cfg_type c_axis_wr, axis_cfg_type c_axis_rd
     );
-        // AXI-MM VIPs in Slave Mode (Memory Responders)
-        c_wr.is_active          = UVM_ACTIVE;
-        c_wr.is_master          = 1'b0; // Slave mode
-        c_rd.is_active          = UVM_ACTIVE;
-        c_rd.is_master          = 1'b0; // Slave mode
+`ifdef DMA_STANDALONE
+        is_standalone_dma = 1'b1;
+`else
+        is_standalone_dma = 1'b0;
+`endif
+        if ($test$plusargs("DMA_STANDALONE")) is_standalone_dma = 1'b1;
+        if ($test$plusargs("SUBSYSTEM"))      is_standalone_dma = 1'b0;
+
+        if (is_standalone_dma) begin
+            // DMA Standalone Mode: VIP acts as active AXI slave responder (no RTL RAM)
+            c_wr.is_active          = UVM_ACTIVE;
+            c_wr.is_master          = 1'b0; // Slave mode
+            c_rd.is_active          = UVM_ACTIVE;
+            c_rd.is_master          = 1'b0; // Slave mode
+            `uvm_info(get_type_name(), "Configured AXI-MM VIPs as ACTIVE SLAVE RESPONDERS for DMA Standalone mode", UVM_LOW)
+        end else begin
+            // Subsystem Mode: RTL axi_ram handles memory responses; VIP acts strictly as passive monitor
+            c_wr.is_active          = UVM_PASSIVE;
+            c_wr.is_master          = 1'b0;
+            c_rd.is_active          = UVM_PASSIVE;
+            c_rd.is_master          = 1'b0;
+            `uvm_info(get_type_name(), "Configured AXI-MM VIPs as PASSIVE MONITORS for Subsystem mode (RTL axi_ram active on bus)", UVM_LOW)
+        end
 
         // Descriptor VIPs in Master Mode (Command Drivers)
         c_dma_rd.is_active      = UVM_ACTIVE;
@@ -112,7 +134,11 @@ class dma_base_test extends uvm_test;
 
     virtual function void end_of_elaboration_phase(uvm_phase phase);
         super.end_of_elaboration_phase(phase);
-        `uvm_info(get_type_name(), "DMA Standalone Verification Environment Topology", UVM_NONE)
+        if (is_standalone_dma) begin
+            `uvm_info(get_type_name(), "DMA Standalone Verification Environment Topology (AXI-MM VIP: ACTIVE SLAVE)", UVM_NONE)
+        end else begin
+            `uvm_info(get_type_name(), "DMA Subsystem Verification Environment Topology (AXI-MM VIP: PASSIVE MONITOR)", UVM_NONE)
+        end
         uvm_top.print_topology();
     endfunction : end_of_elaboration_phase
 
