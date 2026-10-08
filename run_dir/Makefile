@@ -38,8 +38,9 @@ endif
 # -------------------------------------------------------------------------------
 .PHONY: help setup clean \
         test_ram test_dma test_sys test_all \
+        run_dma gui_dma \
         run_ram gui_ram waves_ram \
-        run_dma run_sys gui_sys \
+        run_sys gui_sys \
         report_cov imc_gui
 
 # -------------------------------------------------------------------------------
@@ -50,16 +51,16 @@ help:
 	@echo " AXI4 VIP Cadence Xcelium Simulation Makefile"
 	@echo "==============================================================================="
 	@echo " 1. HARDWARE BINDING CHECKS:"
-	@echo "    make test_ram                  : Test Standalone RAM elaboration"
 	@echo "    make test_dma                  : Test Standalone DMA elaboration"
+	@echo "    make test_ram                  : Test Standalone RAM elaboration"
 	@echo "    make test_sys                  : Test Full Subsystem elaboration"
 	@echo "    make test_all                  : Test all 3 topologies sequentially"
 	@echo ""
 	@echo " 2. TEST EXECUTION (Coverage is ALWAYS collected into ./cov_work):"
+	@echo "    make run_dma [TEST=<name>]     : Run DMA Standalone test (default: dma_sanity_test)"
+	@echo "    make gui_dma [TEST=<name>]     : Run DMA Standalone test with SimVision GUI"
 	@echo "    make run_sys [TEST=<name>]     : Run Subsystem test (default: dma_sanity_test)"
-	@echo "    make run_dma [TEST=<name>]     : Run DMA test (default: dma_sanity_test)"
 	@echo "    make run_ram [TEST=<name>]     : Run RAM test (default: axi_sanity_test)"
-	@echo "    make gui_sys [TEST=<name>]     : Run Subsystem test with interactive SimVision GUI"
 	@echo "    make waves_ram                 : Open generated waves.shm in Cadence SimVision"
 	@echo ""
 	@echo " 3. COVERAGE REPORTING (Cadence IMC):"
@@ -111,6 +112,9 @@ run_sys: setup
 	@$(eval SYS_TARGET_TEST := $(if $(filter axi_sanity_test,$(TEST)),dma_sanity_test,$(TEST)))
 	@echo "[XCELIUM] Running Subsystem Test with Full Coverage: $(SYS_TARGET_TEST)"
 	$(XRUN_BASE) +define+SUBSYSTEM +UVM_TESTNAME=$(SYS_TARGET_TEST) -covtest $(SYS_TARGET_TEST) -l $(LOG_DIR)/sim_sys_$(SYS_TARGET_TEST).log
+
+gui_dma:
+	$(MAKE) run_dma TEST=$(TEST) GUI=1
 
 gui_ram:
 	$(MAKE) run_ram TEST=$(TEST) GUI=1

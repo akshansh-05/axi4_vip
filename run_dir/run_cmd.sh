@@ -18,7 +18,7 @@ TESTLIST_FILE="testlist.f"
 WAVES_TCL="waves.tcl"
 FILELIST="filelist.f"
 
-MODE="ram"
+MODE="dma"
 MODE_EXPLICIT=0
 TEST=""
 GUI=""
@@ -248,7 +248,7 @@ run_single_test() {
     # Auto-detect topology mode from test prefix if not explicitly specified
     if [[ $MODE_EXPLICIT -eq 0 ]]; then
         if [[ "$t_name" =~ ^dma_ ]]; then
-            t_mode="sys"
+            t_mode="dma"
         else
             t_mode="ram"
         fi

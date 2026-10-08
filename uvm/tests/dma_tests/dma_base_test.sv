@@ -96,10 +96,10 @@ class dma_base_test extends uvm_test;
         dma_cfg_type c_dma_rd, dma_cfg_type c_dma_wr,
         axis_cfg_type c_axis_wr, axis_cfg_type c_axis_rd
     );
-`ifdef DMA_STANDALONE
-        is_standalone_dma = 1'b1;
-`else
+`ifdef SUBSYSTEM
         is_standalone_dma = 1'b0;
+`else
+        is_standalone_dma = 1'b1; // Default target: DMA Standalone mode
 `endif
         if ($test$plusargs("DMA_STANDALONE")) is_standalone_dma = 1'b1;
         if ($test$plusargs("SUBSYSTEM"))      is_standalone_dma = 1'b0;
