@@ -50,7 +50,7 @@ class axis_seq_item #(
 
     constraint c_default_delays {
         foreach (delay[i]) {
-            delay[i] inside {[0:5]};
+            soft delay[i] inside {[0:5]};
         }
     }
 

@@ -4,12 +4,12 @@
 // reconstructs complete burst transactions, and broadcasts them via analysis port.
 //
 // Signal Direction Boundaries (DMA Master topology):
-//   DUT Master outputs → AW channel (AWID, AWADDR, AWLEN, AWSIZE, AWBURST, AWVALID)
-//                        W  channel (WDATA, WSTRB, WLAST, WVALID)
-//                        B  channel (BREADY)
-//   Responder Slave outputs → AW channel (AWREADY)
-//                             W  channel (WREADY)
-//                             B  channel (BID, BRESP, BVALID)
+//   DUT Master outputs -> AW channel (AWID, AWADDR, AWLEN, AWSIZE, AWBURST, AWVALID)
+//                         W  channel (WDATA, WSTRB, WLAST, WVALID)
+//                         B  channel (BREADY)
+//   Responder Slave outputs -> AW channel (AWREADY)
+//                              W  channel (WREADY)
+//                              B  channel (BID, BRESP, BVALID)
 //
 // Protocol checks in this monitor validate DUT-driven signals (especially WLAST).
 // Responder-driven checks (BID match) are labeled as TB sanity checks.
