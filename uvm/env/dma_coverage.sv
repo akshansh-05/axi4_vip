@@ -10,6 +10,8 @@
 `define DMA_COVERAGE_SV
 
 // Declare analysis port implementation suffixes for multi-channel subscriber monitoring
+`ifndef DMA_IMP_DECLS
+`define DMA_IMP_DECLS
 `uvm_analysis_imp_decl(_dma_rd_cmd)
 `uvm_analysis_imp_decl(_dma_rd_status)
 `uvm_analysis_imp_decl(_dma_wr_cmd)
@@ -18,6 +20,7 @@
 `uvm_analysis_imp_decl(_axis_wr)
 `uvm_analysis_imp_decl(_axi_rd)
 `uvm_analysis_imp_decl(_axi_wr)
+`endif
 
 class dma_coverage #(
     parameter DATA_WIDTH = 32,

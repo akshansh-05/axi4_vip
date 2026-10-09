@@ -25,7 +25,7 @@ class dma_subsystem_env #(
     typedef axis_rd_agent     #(DATA_WIDTH, STRB_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH) axis_rd_agent_type;
     typedef axi_coverage      #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) cov_type;
     typedef dma_coverage      #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH, LEN_WIDTH, TAG_WIDTH, DEST_WIDTH, USER_WIDTH) dma_cov_type;
-    // typedef axi_scoreboard #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) scb_type;
+    typedef dma_scoreboard #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH, LEN_WIDTH, TAG_WIDTH, DEST_WIDTH, USER_WIDTH) scb_type;
 
     wr_agent_type          axi_wr_agent;
     rd_agent_type          axi_rd_agent;
@@ -35,7 +35,7 @@ class dma_subsystem_env #(
     axis_rd_agent_type     axis_rd_agent;
     cov_type               cov;
     dma_cov_type           dma_cov;
-    // scb_type            scb;
+    scb_type               scb;
 
     `uvm_component_param_utils(dma_subsystem_env #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH, LEN_WIDTH, TAG_WIDTH, DEST_WIDTH, USER_WIDTH))
 
@@ -53,7 +53,7 @@ class dma_subsystem_env #(
         axis_rd_agent     = axis_rd_agent_type::type_id::create("axis_rd_agent", this);
         cov               = cov_type::type_id::create("cov", this);
         dma_cov           = dma_cov_type::type_id::create("dma_cov", this);
-        // scb            = scb_type::type_id::create("scb", this);
+        scb               = scb_type::type_id::create("scb", this);
     endfunction : build_phase
 
     virtual function void connect_phase(uvm_phase phase);
@@ -71,8 +71,16 @@ class dma_subsystem_env #(
         axis_wr_agent.mon.ap.connect(dma_cov.analysis_imp_axis_wr);
         axi_rd_agent.mon.ap.connect(dma_cov.analysis_imp_axi_rd);
         axi_wr_agent.mon.ap.connect(dma_cov.analysis_imp_axi_wr);
-        // axi_wr_agent.mon.ap.connect(scb.analysis_export);
-        // axi_rd_agent.mon.ap.connect(scb.analysis_export);
+
+        // Connect all agent monitors to DMA End-to-End Functional Scoreboard
+        dma_rd_desc_agent.mon.cmd_ap.connect(scb.imp_dma_rd_cmd);
+        dma_rd_desc_agent.mon.status_ap.connect(scb.imp_dma_rd_status);
+        dma_wr_desc_agent.mon.cmd_ap.connect(scb.imp_dma_wr_cmd);
+        dma_wr_desc_agent.mon.status_ap.connect(scb.imp_dma_wr_status);
+        axis_rd_agent.mon.ap.connect(scb.imp_axis_rd);
+        axis_wr_agent.mon.ap.connect(scb.imp_axis_wr);
+        axi_rd_agent.mon.ap.connect(scb.imp_axi_rd);
+        axi_wr_agent.mon.ap.connect(scb.imp_axi_wr);
     endfunction : connect_phase
 
 endclass : dma_subsystem_env
