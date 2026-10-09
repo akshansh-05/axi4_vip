@@ -49,11 +49,13 @@ class axi_seq_item #(
     rand int unsigned             addr_delay;  // Delay before driving address valid
     rand int unsigned             data_delay[];// Delay before driving write data valid
 
-    // Response attributes captured from the slave
+    // Response attributes captured from the slave / bus
     bit [ID_WIDTH-1:0]            bid;         // Write response ID
     bit [1:0]                     bresp;       // Write response status
     bit [ID_WIDTH-1:0]            rid[];       // Read response ID per beat
     bit [1:0]                     rresp[];     // Read response status per beat
+    bit                           wlast[];     // Observed WLAST per write data beat
+    bit                           rlast[];     // Observed RLAST per read data beat
 
     // UVM Field Macros for automatic print(), copy(), compare(), and record()
     `uvm_object_param_utils_begin(axi_seq_item #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
@@ -71,6 +73,8 @@ class axi_seq_item #(
         `uvm_field_int      (bresp,                        UVM_ALL_ON | UVM_BIN)
         `uvm_field_array_int(rid,                          UVM_ALL_ON)
         `uvm_field_array_int(rresp,                        UVM_ALL_ON | UVM_BIN)
+        `uvm_field_array_int(wlast,                        UVM_ALL_ON | UVM_BIN)
+        `uvm_field_array_int(rlast,                        UVM_ALL_ON | UVM_BIN)
     `uvm_object_utils_end
 
     // Sizing constraints: arrays must match burst beat count

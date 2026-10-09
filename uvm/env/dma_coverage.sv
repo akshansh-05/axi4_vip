@@ -66,11 +66,13 @@ class dma_coverage #(
 
     bit [1:0]            current_rresp;
     bit                  is_rlast;
+    bit                  is_rd_final_beat;
 
     bit [STRB_WIDTH-1:0] current_wstrb;
     int                  wr_beat_idx;
     int                  total_wr_beats;
     bit                  is_wlast;
+    bit                  is_wr_final_beat;
 
     // Concurrency state tracking (Feature 3 Full-Duplex)
     bit                  mm2s_in_flight;
@@ -405,10 +407,30 @@ class dma_coverage #(
             ignore_bins resp_exokay = {2'b01};       // Not applicable to DMA master (no AxLOCK)
         }
 
-        // Beat position within burst (RLAST)
+        // Observed Beat position within burst (RLAST from responder)
         cp_rlast : coverpoint is_rlast {
             bins intermediate_beat = {0};
             bins last_burst_beat   = {1};
+        }
+
+        // Expected final beat position
+        cp_rd_beat_pos : coverpoint is_rd_final_beat {
+            bins intermediate_beat = {0};
+            bins final_beat        = {1};
+        }
+
+        // Cross expected beat position with actual observed RLAST signal.
+        // Validates proper RLAST framing from the slave responder:
+        // - intermediate_beat with RLAST=0 (normal intermediate transfer)
+        // - final_beat with RLAST=1 (properly terminated burst)
+        // Illegal bins guarantee that framing bugs cannot silently pass coverage:
+        // - intermediate_beat with RLAST=1 (Premature RLAST)
+        // - final_beat with RLAST=0 (Missing RLAST)
+        cross_rlast_framing : cross cp_rd_beat_pos, cp_rlast {
+            bins valid_intermediate      = binsof(cp_rd_beat_pos.intermediate_beat) && binsof(cp_rlast.intermediate_beat);
+            bins valid_final_rlast       = binsof(cp_rd_beat_pos.final_beat)        && binsof(cp_rlast.last_burst_beat);
+            illegal_bins premature_rlast = binsof(cp_rd_beat_pos.intermediate_beat) && binsof(cp_rlast.last_burst_beat);
+            illegal_bins missing_rlast   = binsof(cp_rd_beat_pos.final_beat)        && binsof(cp_rlast.intermediate_beat);
         }
 
         // Cross RRESP with RLAST.
@@ -541,10 +563,30 @@ class dma_coverage #(
             bins dummy_zero_pad    = {4'b0000};       // Immediate zero-byte early TLAST
         }
 
-        // Write Last Beat Indicator (WLAST)
+        // Observed Write Last Beat Indicator (m_axi_wlast from DUT master)
         cp_wlast : coverpoint is_wlast {
             bins intermediate_beat = {0};
             bins last_burst_beat   = {1};
+        }
+
+        // Expected final beat position
+        cp_wr_beat_pos : coverpoint is_wr_final_beat {
+            bins intermediate_beat = {0};
+            bins final_beat        = {1};
+        }
+
+        // Cross expected burst beat position with actual observed WLAST signal.
+        // Validates proper WLAST framing from the DMA master:
+        // - intermediate_beat with WLAST=0 (normal intermediate transfer)
+        // - final_beat with WLAST=1 (properly terminated burst)
+        // Illegal bins guarantee that framing bugs cannot silently pass coverage:
+        // - intermediate_beat with WLAST=1 (Premature WLAST bug in DUT)
+        // - final_beat with WLAST=0 (Missing WLAST bug in DUT)
+        cross_wlast_framing : cross cp_wr_beat_pos, cp_wlast {
+            bins valid_intermediate      = binsof(cp_wr_beat_pos.intermediate_beat) && binsof(cp_wlast.intermediate_beat);
+            bins valid_final_wlast       = binsof(cp_wr_beat_pos.final_beat)        && binsof(cp_wlast.last_burst_beat);
+            illegal_bins premature_wlast = binsof(cp_wr_beat_pos.intermediate_beat) && binsof(cp_wlast.last_burst_beat);
+            illegal_bins missing_wlast   = binsof(cp_wr_beat_pos.final_beat)        && binsof(cp_wlast.intermediate_beat);
         }
 
     endgroup : cg_dma_axi_w_master
@@ -765,8 +807,9 @@ class dma_coverage #(
         cg_dma_axi_ar_master.sample();
 
         foreach (axi_rd_txn.rresp[i]) begin
-            current_rresp = axi_rd_txn.rresp[i];
-            is_rlast      = (i == axi_rd_txn.rresp.size() - 1);
+            current_rresp    = axi_rd_txn.rresp[i];
+            is_rlast         = (i < axi_rd_txn.rlast.size()) ? axi_rd_txn.rlast[i] : 1'b0;
+            is_rd_final_beat = (i == axi_rd_txn.rresp.size() - 1);
             cg_dma_axi_r_master.sample();
         end
     endfunction : write_axi_rd
@@ -778,9 +821,10 @@ class dma_coverage #(
 
         total_wr_beats = t.strb.size();
         foreach (axi_wr_txn.strb[i]) begin
-            current_wstrb = axi_wr_txn.strb[i];
-            wr_beat_idx   = i;
-            is_wlast      = (i == total_wr_beats - 1);
+            current_wstrb    = axi_wr_txn.strb[i];
+            wr_beat_idx      = i;
+            is_wlast         = (i < axi_wr_txn.wlast.size()) ? axi_wr_txn.wlast[i] : 1'b0;
+            is_wr_final_beat = (i == total_wr_beats - 1);
             cg_dma_axi_w_master.sample();
         end
 

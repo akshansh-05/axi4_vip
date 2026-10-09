@@ -145,15 +145,17 @@ class axi_wr_monitor #(
             txn.size       = desc.size;
             txn.burst      = desc.burst;
 
-            txn.data = new[desc.len + 1];
-            txn.strb = new[desc.len + 1];
+            txn.data  = new[desc.len + 1];
+            txn.strb  = new[desc.len + 1];
+            txn.wlast = new[desc.len + 1];
 
             for (int i = 0; i <= desc.len; i++) begin
                 wait (w_q.size() > 0);
                 begin
                     w_beat_t beat = w_q.pop_front();
-                    txn.data[i] = beat.data;
-                    txn.strb[i] = beat.strb;
+                    txn.data[i]  = beat.data;
+                    txn.strb[i]  = beat.strb;
+                    txn.wlast[i] = beat.last; // Capture actual observed WLAST signal from DUT
 
                     // DUT-output protocol check: WLAST framing (AXI4 A3.4.1)
                     // WLAST is driven by the DMA master — a framing violation is a real DUT bug.

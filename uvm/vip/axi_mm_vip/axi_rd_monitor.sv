@@ -107,6 +107,7 @@ class axi_rd_monitor #(
             txn.data  = new[desc.len + 1];
             txn.rresp = new[desc.len + 1];
             txn.rid   = new[desc.len + 1];
+            txn.rlast = new[desc.len + 1];
 
             beat_idx = 0;
             // Architectural Note: This monitor collects transactions strictly on accepted handshakes
@@ -118,6 +119,7 @@ class axi_rd_monitor #(
                     txn.data[beat_idx]  = vif.rd_mon_cb.rdata;
                     txn.rresp[beat_idx] = vif.rd_mon_cb.rresp;
                     txn.rid[beat_idx]   = vif.rd_mon_cb.rid;
+                    txn.rlast[beat_idx] = vif.rd_mon_cb.rlast; // Capture actual observed RLAST signal from responder
 
                     // Responder sanity check: RLAST framing
                     // RLAST is driven by the TB slave responder, not the DUT master.
