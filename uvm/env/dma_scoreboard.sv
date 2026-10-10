@@ -12,14 +12,19 @@
 //                 - Validates 1-to-1 stream packet boundary framing per descriptor.
 //                 - Matches AXI-MM write burst payload against absolute destination byte addresses.
 //                 - Verifies WSTRB lane placement and unaligned start/end strobe masking.
-//                 - Validates S2MM completion status_len, tag, and error code.
-//              3. Decoupled Concurrency & Burst Resilience:
-//                 - Incremental pair-wise drain prevents false mismatches regardless of
-//                   whether AXI bursts or AXIS packets complete first.
-//                 - Tag-indexed maps support concurrent full-duplex operation with zero blocking.
-//                 - Enforces in-order completion within each engine while cleanly deleting completed
-//                   descriptors by tag.
-//              4. Authoritative Cleanliness & Verdict:
+//              4. Architectural Protocol Assumptions:
+//                 - Single-Pipeline In-Order Processing per Engine: The RTL implements MM2S
+//                   and S2MM as independent single-descriptor FSMs. Bus handshakes do not carry
+//                   descriptor tags (ARID/AWID are tied to 0; AXIS carries no tag). Descriptors
+//                   within each direction execute strictly in FIFO order. The scoreboard relies
+//                   on and asserts this in-order guarantee for bus data attribution (queue[0]).
+//                 - Cross-Direction Concurrency: MM2S and S2MM engines run fully concurrently
+//                   and decoupled, completing in arbitrary relative order.
+//              5. S2MM Buffer Bounds & Overflow Enforcement:
+//                 - Enforces that active WSTRBs never write past [dest_addr, dest_addr + buffer_len - 1].
+//                 - Validates that streams exceeding buffer_len are clamped to buffer_len in memory
+//                   and status_len, with excess stream bytes cleanly drained in STATE_DROP_DATA.
+//              6. Authoritative Cleanliness & Verdict:
 //                 - check_phase flags orphan/hung descriptors or uncompared bytes.
 //                 - report_phase includes outstanding queues, packet errors, and address errors
 //                   directly in the authoritative Pass/Fail verification scorecard verdict.
@@ -470,10 +475,16 @@ class dma_scoreboard #(
         desc.stream_pkt_bytes = pkt_bytes;
         desc.stream_done      = 1'b1;
 
+        // If stream packet exceeds descriptor buffer, log informational note
+        if (pkt_bytes > desc.buffer_len) begin
+            `uvm_info("SCB_S2MM_STREAM_OVERFLOW", $sformatf("S2MM Ingress stream packet (%0d bytes) exceeds descriptor buffer (%0d bytes). DMA is expected to write %0d bytes and discard excess in STATE_DROP_DATA. (tag 0x%02h)",
+                      pkt_bytes, desc.buffer_len, desc.buffer_len, desc.tag), UVM_MEDIUM)
+        end
+
         compare_s2mm_data(desc);
     endfunction : write_axis_wr
 
-    // 5.3. S2MM Memory Write Verification (Address Progression & Strobe Placement)
+    // 5.3. S2MM Memory Write Verification (Address Progression, Strobe Placement & Buffer Bounds)
     virtual function void write_axi_wr(axi_item_type t);
         s2mm_txn_type desc;
 
@@ -493,11 +504,18 @@ class dma_scoreboard #(
         desc.expected_next_burst_addr += ((t.len + 1) * STRB_WIDTH);
         desc.first_burst_seen = 1'b1;
 
-        // [P1 Fix] Unpack write burst beats and verify byte address and strobe placement
+        // [P1 Fix] Unpack write burst beats and verify byte address, strobe placement, and buffer bounds
         for (int i = 0; i <= t.len; i++) begin
             for (int b = 0; b < STRB_WIDTH; b++) begin
                 bit [ADDR_WIDTH-1:0] lane_addr = (t.addr & ~(STRB_WIDTH - 1)) + (i * STRB_WIDTH) + b;
                 if (t.strb[i][b]) begin
+                    // Buffer Bounds Check: active strobe lane must stay within [dest_addr, dest_addr + buffer_len - 1]
+                    if (lane_addr >= (desc.dest_addr + desc.buffer_len)) begin
+                        `uvm_error("SCB_S2MM_BUF_OVERFLOW", $sformatf("S2MM Memory Buffer Overflow! Active WSTRB written to address 0x%04h, exceeding buffer boundary [0x%04h:0x%04h] (buffer_len=%0d, tag 0x%02h)",
+                                   lane_addr, desc.dest_addr, desc.dest_addr + desc.buffer_len - 1, desc.buffer_len, desc.tag))
+                        s2mm_addr_errors++;
+                    end
+
                     // Active strobe lane: must match expected sequential memory byte address
                     if (lane_addr !== desc.expected_next_byte_addr) begin
                         `uvm_error("SCB_S2MM_BYTE_ADDR", $sformatf("S2MM Active WSTRB at unexpected memory address! Expected=0x%04h, lane_addr=0x%04h (burst=0x%04h, beat=%0d, lane=%0d, tag 0x%02h)",
@@ -522,9 +540,11 @@ class dma_scoreboard #(
         compare_s2mm_data(desc);
     endfunction : write_axi_wr
 
-    // 5.4. S2MM Incremental Pair-Wise Data Comparator
+    // 5.4. S2MM Incremental Pair-Wise Data Comparator (Buffer Bounds Clamped)
     virtual function void compare_s2mm_data(s2mm_txn_type desc);
-        while (desc.stream_in_bytes.size() > 0 && desc.axi_wr_bytes.size() > 0) begin
+        // Only compare up to descriptor buffer_len. Excess stream bytes beyond buffer_len
+        // are discarded by the DMA hardware in STATE_DROP_DATA.
+        while (desc.stream_in_bytes.size() > 0 && desc.axi_wr_bytes.size() > 0 && desc.bytes_matched < desc.buffer_len) begin
             byte exp_b = desc.stream_in_bytes.pop_front();
             byte act_b = desc.axi_wr_bytes.pop_front();
             s2mm_bytes_checked++;
@@ -540,10 +560,11 @@ class dma_scoreboard #(
         end
     endfunction : compare_s2mm_data
 
-    // 5.5. S2MM Completion Status Verification
+    // 5.5. S2MM Completion Status Verification (Buffer Bounds Enforced)
     virtual function void write_dma_wr_status(dma_desc_item_type t);
         s2mm_txn_type desc;
         int found_idx = -1;
+        int unsigned expected_status_len;
         s2mm_status_count++;
 
         if (!s2mm_by_tag.exists(t.status_tag)) begin
@@ -568,29 +589,45 @@ class dma_scoreboard #(
             s2mm_pkt_errors++;
         end
 
-        // Drain any remaining bytes
+        // Drain any remaining bytes up to buffer limit
         compare_s2mm_data(desc);
 
-        // Verify status_len accurately reflects the number of transferred stream bytes
-        if (t.status_len !== desc.total_stream_bytes) begin
-            `uvm_error("SCB_S2MM_LEN_MISMATCH", $sformatf("S2MM status_len mismatch for tag 0x%02h: Expected=%0d bytes, Reported=%0d bytes",
-                       t.status_tag, desc.total_stream_bytes, t.status_len))
+        // Expected transferred byte count: clamped at buffer_len if stream overflows
+        expected_status_len = (desc.total_stream_bytes > desc.buffer_len) ? desc.buffer_len : desc.total_stream_bytes;
+
+        // Verify status_len accurately reflects the number of bytes written to memory
+        if (t.status_len !== expected_status_len) begin
+            `uvm_error("SCB_S2MM_LEN_MISMATCH", $sformatf("S2MM status_len mismatch for tag 0x%02h: Expected=%0d bytes (stream=%0d, buffer_len=%0d), Reported=%0d bytes",
+                       t.status_tag, expected_status_len, desc.total_stream_bytes, desc.buffer_len, t.status_len))
             s2mm_len_mismatches++;
         end
 
-        // Verify all stream bytes reached memory
-        if (desc.bytes_matched != desc.total_stream_bytes) begin
-            `uvm_error("SCB_S2MM_DATA_COUNT", $sformatf("S2MM matched bytes mismatch for tag 0x%02h: Streamed=%0d, Matched=%0d",
-                       t.status_tag, desc.total_stream_bytes, desc.bytes_matched))
+        // Verify all expected stream bytes reached memory
+        if (desc.bytes_matched != expected_status_len) begin
+            `uvm_error("SCB_S2MM_DATA_COUNT", $sformatf("S2MM matched bytes mismatch for tag 0x%02h: Expected=%0d, Matched=%0d",
+                       t.status_tag, expected_status_len, desc.bytes_matched))
             s2mm_len_mismatches++;
         end
 
-        // Verify no leftover unmatched bytes
-        if (desc.stream_in_bytes.size() != 0) begin
+        // In overflow scenarios (stream > buffer_len), excess stream bytes are dropped by the DUT in STATE_DROP_DATA
+        if (desc.total_stream_bytes > desc.buffer_len) begin
+            int unsigned dropped_bytes = desc.total_stream_bytes - desc.buffer_len;
+            if (desc.stream_in_bytes.size() == dropped_bytes) begin
+                `uvm_info("SCB_S2MM_DROPPED_DATA", $sformatf("S2MM Tag 0x%02h: %0d excess stream bytes dropped as expected by DMA buffer bounds enforcement",
+                          t.status_tag, dropped_bytes), UVM_HIGH)
+                desc.stream_in_bytes.delete(); // Cleanly consume dropped stream bytes
+            end else begin
+                `uvm_error("SCB_S2MM_DROP_MISMATCH", $sformatf("S2MM Tag 0x%02h: Expected %0d dropped bytes, but %0d remained in stream queue!",
+                           t.status_tag, dropped_bytes, desc.stream_in_bytes.size()))
+                s2mm_len_mismatches++;
+            end
+        end else if (desc.stream_in_bytes.size() != 0) begin
             `uvm_error("SCB_S2MM_ORPHAN_STREAM", $sformatf("S2MM Tag 0x%02h completed with %0d unwritten stream bytes!",
                        t.status_tag, desc.stream_in_bytes.size()))
             s2mm_len_mismatches++;
         end
+
+        // Verify no leftover unmatched memory write bytes
         if (desc.axi_wr_bytes.size() != 0) begin
             `uvm_error("SCB_S2MM_ORPHAN_MEM", $sformatf("S2MM Tag 0x%02h completed with %0d uncompared memory write bytes!",
                        t.status_tag, desc.axi_wr_bytes.size()))
