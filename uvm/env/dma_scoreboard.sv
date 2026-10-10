@@ -3,19 +3,26 @@
 //              Contains two independent, fully decoupled checking engines:
 //              1. MM2S Engine (Memory -> Stream):
 //                 - Slices AXI-MM read bursts into expected stream bytes.
-//                 - Matches egress stream payload byte-for-byte, verifying TLAST & TKEEP.
+//                 - Validates AXI read burst addresses and progression.
+//                 - Matches egress stream payload byte-for-byte, verifying 1-to-1 packet
+//                   boundary framing, TLAST positioning, and final TKEEP.
 //                 - Validates MM2S completion status tag and error code.
 //              2. S2MM Engine (Stream -> Memory):
 //                 - Ingests incoming stream payload bytes as golden reference.
-//                 - Matches AXI-MM write burst payload, WSTRB lane enables, and alignment.
+//                 - Validates 1-to-1 stream packet boundary framing per descriptor.
+//                 - Matches AXI-MM write burst payload against absolute destination byte addresses.
+//                 - Verifies WSTRB lane placement and unaligned start/end strobe masking.
 //                 - Validates S2MM completion status_len, tag, and error code.
 //              3. Decoupled Concurrency & Burst Resilience:
 //                 - Incremental pair-wise drain prevents false mismatches regardless of
 //                   whether AXI bursts or AXIS packets complete first.
 //                 - Tag-indexed maps support concurrent full-duplex operation with zero blocking.
-//              4. Cleanliness Verification:
+//                 - Enforces in-order completion within each engine while cleanly deleting completed
+//                   descriptors by tag.
+//              4. Authoritative Cleanliness & Verdict:
 //                 - check_phase flags orphan/hung descriptors or uncompared bytes.
-//                 - report_phase renders an authoritative Pass/Fail verification scorecard.
+//                 - report_phase includes outstanding queues, packet errors, and address errors
+//                   directly in the authoritative Pass/Fail verification scorecard verdict.
 
 `ifndef DMA_SCOREBOARD_SV
 `define DMA_SCOREBOARD_SV
@@ -48,18 +55,24 @@ class mm2s_desc_txn #(
     byte                 actual_bytes[$];   // Egress stream bytes observed on AXIS
     int unsigned         total_bytes_expected;
     int unsigned         bytes_matched;
+    int unsigned         packet_count;      // Number of stream packets observed (must be exactly 1)
+    int unsigned         stream_pkt_bytes;  // Total bytes in the observed stream packet
+    bit [ADDR_WIDTH-1:0] expected_next_burst_addr; // Next expected AXI read burst address
     bit                  cmd_seen;
     bit                  stream_done;
     bit                  status_done;
 
     function new();
-        expected_bytes       = {};
-        actual_bytes         = {};
-        total_bytes_expected = 0;
-        bytes_matched        = 0;
-        cmd_seen             = 1'b0;
-        stream_done          = 1'b0;
-        status_done          = 1'b0;
+        expected_bytes            = {};
+        actual_bytes              = {};
+        total_bytes_expected      = 0;
+        bytes_matched             = 0;
+        packet_count              = 0;
+        stream_pkt_bytes          = 0;
+        expected_next_burst_addr  = '0;
+        cmd_seen                  = 1'b0;
+        stream_done               = 1'b0;
+        status_done               = 1'b0;
     endfunction
 endclass : mm2s_desc_txn
 
@@ -75,18 +88,28 @@ class s2mm_desc_txn #(
     byte                 axi_wr_bytes[$];    // Actual bytes written by DMA master to AXI-MM
     int unsigned         total_stream_bytes;
     int unsigned         bytes_matched;
+    int unsigned         packet_count;       // Number of stream packets observed (must be exactly 1)
+    int unsigned         stream_pkt_bytes;   // Total bytes in the observed stream packet
+    bit [ADDR_WIDTH-1:0] expected_next_byte_addr;  // Next expected memory byte address for WSTRB
+    bit [ADDR_WIDTH-1:0] expected_next_burst_addr; // Next expected AXI write burst address
+    bit                  first_burst_seen;
     bit                  cmd_seen;
     bit                  stream_done;
     bit                  status_done;
 
     function new();
-        stream_in_bytes    = {};
-        axi_wr_bytes       = {};
-        total_stream_bytes = 0;
-        bytes_matched      = 0;
-        cmd_seen           = 1'b0;
-        stream_done        = 1'b0;
-        status_done        = 1'b0;
+        stream_in_bytes           = {};
+        axi_wr_bytes              = {};
+        total_stream_bytes        = 0;
+        bytes_matched             = 0;
+        packet_count              = 0;
+        stream_pkt_bytes          = 0;
+        expected_next_byte_addr   = '0;
+        expected_next_burst_addr  = '0;
+        first_burst_seen          = 1'b0;
+        cmd_seen                  = 1'b0;
+        stream_done               = 1'b0;
+        status_done               = 1'b0;
     endfunction
 endclass : s2mm_desc_txn
 
@@ -129,6 +152,9 @@ class dma_scoreboard #(
     // -------------------------------------------------------------------------
     // 2. Internal Transfer Records & Tracking Queues
     // -------------------------------------------------------------------------
+    // Architectural Note: The AXI DMA hardware pipelines MM2S and S2MM as two
+    // independent single-descriptor FSMs. Within each engine, descriptors execute
+    // strictly in FIFO order. Across engines, execution is fully concurrent and decoupled.
     mm2s_txn_type mm2s_queue[$];
     s2mm_txn_type s2mm_queue[$];
 
@@ -143,7 +169,10 @@ class dma_scoreboard #(
     int unsigned mm2s_bytes_checked;
     int unsigned mm2s_byte_matches;
     int unsigned mm2s_byte_mismatches;
+    int unsigned mm2s_pkt_errors;
+    int unsigned mm2s_addr_errors;
     int unsigned mm2s_status_mismatches;
+    int unsigned mm2s_hang_count;
 
     int unsigned s2mm_cmd_count;
     int unsigned s2mm_status_count;
@@ -151,7 +180,10 @@ class dma_scoreboard #(
     int unsigned s2mm_byte_matches;
     int unsigned s2mm_byte_mismatches;
     int unsigned s2mm_len_mismatches;
+    int unsigned s2mm_pkt_errors;
+    int unsigned s2mm_addr_errors;
     int unsigned s2mm_status_mismatches;
+    int unsigned s2mm_hang_count;
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -172,7 +204,10 @@ class dma_scoreboard #(
         mm2s_bytes_checked     = 0;
         mm2s_byte_matches      = 0;
         mm2s_byte_mismatches   = 0;
+        mm2s_pkt_errors        = 0;
+        mm2s_addr_errors       = 0;
         mm2s_status_mismatches = 0;
+        mm2s_hang_count        = 0;
 
         s2mm_cmd_count         = 0;
         s2mm_status_count      = 0;
@@ -180,7 +215,10 @@ class dma_scoreboard #(
         s2mm_byte_matches      = 0;
         s2mm_byte_mismatches   = 0;
         s2mm_len_mismatches    = 0;
+        s2mm_pkt_errors        = 0;
+        s2mm_addr_errors       = 0;
         s2mm_status_mismatches = 0;
+        s2mm_hang_count        = 0;
     endfunction : new
 
     // =========================================================================
@@ -190,11 +228,12 @@ class dma_scoreboard #(
     // 4.1. MM2S Read Command Ingestion
     virtual function void write_dma_rd_cmd(dma_desc_item_type t);
         mm2s_txn_type desc = new();
-        desc.start_addr           = t.addr;
-        desc.xfer_len             = t.len;
-        desc.tag                  = t.tag;
-        desc.total_bytes_expected = t.len;
-        desc.cmd_seen             = 1'b1;
+        desc.start_addr               = t.addr;
+        desc.xfer_len                 = t.len;
+        desc.tag                      = t.tag;
+        desc.total_bytes_expected     = t.len;
+        desc.expected_next_burst_addr = t.addr & ~(STRB_WIDTH - 1);
+        desc.cmd_seen                 = 1'b1;
 
         mm2s_queue.push_back(desc);
         mm2s_by_tag[t.tag] = desc;
@@ -204,7 +243,7 @@ class dma_scoreboard #(
                   t.tag, t.addr, t.len), UVM_MEDIUM)
     endfunction : write_dma_rd_cmd
 
-    // 4.2. MM2S Memory Read Snooping (Source Truth)
+    // 4.2. MM2S Memory Read Snooping (Source Truth & Address Progression)
     virtual function void write_axi_rd(axi_item_type t);
         mm2s_txn_type desc;
 
@@ -214,6 +253,14 @@ class dma_scoreboard #(
         end
 
         desc = mm2s_queue[0];
+
+        // Verify AXI Read burst address progression
+        if (t.addr !== desc.expected_next_burst_addr) begin
+            `uvm_error("SCB_MM2S_BURST_ADDR", $sformatf("MM2S AXI Read burst address mismatch for tag 0x%02h! Expected=0x%04h, Actual=0x%04h",
+                       desc.tag, desc.expected_next_burst_addr, t.addr))
+            mm2s_addr_errors++;
+        end
+        desc.expected_next_burst_addr += ((t.len + 1) * STRB_WIDTH);
 
         // Unpack 32-bit read data words into individual byte stream
         for (int i = 0; i <= t.len; i++) begin
@@ -230,9 +277,10 @@ class dma_scoreboard #(
         compare_mm2s_data(desc);
     endfunction : write_axi_rd
 
-    // 4.3. MM2S Egress Stream Verification (Destination Stream Sink)
+    // 4.3. MM2S Egress Stream Verification (Destination Stream Sink & Packet Framing)
     virtual function void write_axis_rd(axis_item_type t);
         mm2s_txn_type desc;
+        int unsigned pkt_bytes = 0;
 
         if (mm2s_queue.size() == 0) begin
             `uvm_error("SCB_MM2S_UNEXP_STREAM", "Observed egress stream packet on AXIS without active MM2S descriptor!")
@@ -241,17 +289,35 @@ class dma_scoreboard #(
 
         desc = mm2s_queue[0];
 
-        // Unpack stream beats into actual byte queue
+        // Count packet payload bytes across all beats
         for (int beat = 0; beat < t.data.size(); beat++) begin
             for (int lane = 0; lane < STRB_WIDTH; lane++) begin
                 if (t.keep[beat][lane]) begin
                     byte act_byte = (t.data[beat] >> (8 * lane)) & 8'hFF;
                     desc.actual_bytes.push_back(act_byte);
+                    pkt_bytes++;
                 end
             end
         end
 
-        desc.stream_done = 1'b1;
+        // [P1 Fix] Check 1-to-1 packet boundary framing per descriptor
+        if (desc.packet_count > 0) begin
+            `uvm_error("SCB_MM2S_EXTRA_PKT", $sformatf("MM2S descriptor tag 0x%02h produced multiple stream packets! (packet #%0d)",
+                       desc.tag, desc.packet_count + 1))
+            mm2s_pkt_errors++;
+        end
+
+        // [P1 Fix] Verify packet length at TLAST matches descriptor requested length
+        if (pkt_bytes != desc.xfer_len) begin
+            `uvm_error("SCB_MM2S_PKT_LEN", $sformatf("MM2S Stream packet terminated with TLAST at %0d bytes, but descriptor requested %0d bytes! (tag 0x%02h)",
+                       pkt_bytes, desc.xfer_len, desc.tag))
+            mm2s_pkt_errors++;
+        end
+
+        desc.packet_count++;
+        desc.stream_pkt_bytes = pkt_bytes;
+        desc.stream_done      = 1'b1;
+
         compare_mm2s_data(desc);
     endfunction : write_axis_rd
 
@@ -276,6 +342,7 @@ class dma_scoreboard #(
     // 4.5. MM2S Completion Status Verification
     virtual function void write_dma_rd_status(dma_desc_item_type t);
         mm2s_txn_type desc;
+        int found_idx = -1;
         mm2s_status_count++;
 
         if (!mm2s_by_tag.exists(t.status_tag)) begin
@@ -286,6 +353,19 @@ class dma_scoreboard #(
 
         desc = mm2s_by_tag[t.status_tag];
         desc.status_done = 1'b1;
+
+        // [P2 Fix] Check in-order completion assertion for the single-pipeline MM2S engine
+        if (mm2s_queue.size() > 0 && mm2s_queue[0].tag !== t.status_tag) begin
+            `uvm_error("SCB_MM2S_OOO", $sformatf("MM2S completion status tag 0x%02h arrived out-of-order! Expected queue head tag 0x%02h",
+                       t.status_tag, mm2s_queue[0].tag))
+            mm2s_status_mismatches++;
+        end
+
+        // [P1 Fix] Verify that a complete stream packet (TLAST) was observed before status completion
+        if (desc.packet_count == 0) begin
+            `uvm_error("SCB_MM2S_NO_PKT", $sformatf("MM2S status reported for tag 0x%02h, but no stream packet (TLAST) was observed!", t.status_tag))
+            mm2s_pkt_errors++;
+        end
 
         // Drain any remaining bytes
         compare_mm2s_data(desc);
@@ -316,9 +396,15 @@ class dma_scoreboard #(
             mm2s_status_mismatches++;
         end
 
-        // Clean up completed descriptor
-        if (mm2s_queue.size() > 0 && mm2s_queue[0].tag == t.status_tag) begin
-            void'(mm2s_queue.pop_front());
+        // [P2 Fix] Clean up completed descriptor by tag across both lookup structures
+        foreach (mm2s_queue[i]) begin
+            if (mm2s_queue[i].tag == t.status_tag) begin
+                found_idx = i;
+                break;
+            end
+        end
+        if (found_idx >= 0) begin
+            mm2s_queue.delete(found_idx);
         end
         mm2s_by_tag.delete(t.status_tag);
 
@@ -333,10 +419,13 @@ class dma_scoreboard #(
     // 5.1. S2MM Write Command Ingestion
     virtual function void write_dma_wr_cmd(dma_desc_item_type t);
         s2mm_txn_type desc = new();
-        desc.dest_addr   = t.addr;
-        desc.buffer_len  = t.len;
-        desc.tag         = t.tag;
-        desc.cmd_seen    = 1'b1;
+        desc.dest_addr                 = t.addr;
+        desc.buffer_len                = t.len;
+        desc.tag                       = t.tag;
+        desc.expected_next_byte_addr   = t.addr;
+        desc.expected_next_burst_addr  = t.addr & ~(STRB_WIDTH - 1);
+        desc.first_burst_seen          = 1'b0;
+        desc.cmd_seen                  = 1'b1;
 
         s2mm_queue.push_back(desc);
         s2mm_by_tag[t.tag] = desc;
@@ -346,9 +435,10 @@ class dma_scoreboard #(
                   t.tag, t.addr, t.len), UVM_MEDIUM)
     endfunction : write_dma_wr_cmd
 
-    // 5.2. S2MM Ingress Stream Ingestion (Source Truth Payload)
+    // 5.2. S2MM Ingress Stream Ingestion (Source Truth Payload & Packet Framing)
     virtual function void write_axis_wr(axis_item_type t);
         s2mm_txn_type desc;
+        int unsigned pkt_bytes = 0;
 
         if (s2mm_queue.size() == 0) begin
             `uvm_error("SCB_S2MM_UNEXP_STREAM", "Observed ingress stream packet on AXIS without active S2MM descriptor!")
@@ -357,6 +447,13 @@ class dma_scoreboard #(
 
         desc = s2mm_queue[0];
 
+        // [P1 Fix] Check 1-to-1 packet boundary framing per descriptor
+        if (desc.packet_count > 0) begin
+            `uvm_error("SCB_S2MM_EXTRA_PKT", $sformatf("S2MM descriptor tag 0x%02h received multiple ingress stream packets! (packet #%0d)",
+                       desc.tag, desc.packet_count + 1))
+            s2mm_pkt_errors++;
+        end
+
         // Collect all active stream payload bytes
         for (int beat = 0; beat < t.data.size(); beat++) begin
             for (int lane = 0; lane < STRB_WIDTH; lane++) begin
@@ -364,15 +461,19 @@ class dma_scoreboard #(
                     byte stream_b = (t.data[beat] >> (8 * lane)) & 8'hFF;
                     desc.stream_in_bytes.push_back(stream_b);
                     desc.total_stream_bytes++;
+                    pkt_bytes++;
                 end
             end
         end
 
-        desc.stream_done = 1'b1;
+        desc.packet_count++;
+        desc.stream_pkt_bytes = pkt_bytes;
+        desc.stream_done      = 1'b1;
+
         compare_s2mm_data(desc);
     endfunction : write_axis_wr
 
-    // 5.3. S2MM Memory Write Verification (Destination Comparator)
+    // 5.3. S2MM Memory Write Verification (Address Progression & Strobe Placement)
     virtual function void write_axi_wr(axi_item_type t);
         s2mm_txn_type desc;
 
@@ -383,20 +484,37 @@ class dma_scoreboard #(
 
         desc = s2mm_queue[0];
 
-        // Verify starting address alignment on initial burst
-        if (desc.bytes_matched == 0 && desc.axi_wr_bytes.size() == 0) begin
-            if (t.addr !== (desc.dest_addr & ~(STRB_WIDTH - 1))) begin
-                `uvm_error("SCB_S2MM_ADDR_MISMATCH", $sformatf("S2MM Write Address mismatch: Expected=0x%04h, Actual=0x%04h",
-                           desc.dest_addr, t.addr))
-            end
+        // [P1 Fix] Verify AXI Write burst address progression across ALL bursts
+        if (t.addr !== desc.expected_next_burst_addr) begin
+            `uvm_error("SCB_S2MM_BURST_ADDR", $sformatf("S2MM AXI Write burst address mismatch for tag 0x%02h! Expected=0x%04h, Actual=0x%04h",
+                       desc.tag, desc.expected_next_burst_addr, t.addr))
+            s2mm_addr_errors++;
         end
+        desc.expected_next_burst_addr += ((t.len + 1) * STRB_WIDTH);
+        desc.first_burst_seen = 1'b1;
 
-        // Unpack write burst beats and push active bytes into observed memory queue
+        // [P1 Fix] Unpack write burst beats and verify byte address and strobe placement
         for (int i = 0; i <= t.len; i++) begin
             for (int b = 0; b < STRB_WIDTH; b++) begin
+                bit [ADDR_WIDTH-1:0] lane_addr = (t.addr & ~(STRB_WIDTH - 1)) + (i * STRB_WIDTH) + b;
                 if (t.strb[i][b]) begin
+                    // Active strobe lane: must match expected sequential memory byte address
+                    if (lane_addr !== desc.expected_next_byte_addr) begin
+                        `uvm_error("SCB_S2MM_BYTE_ADDR", $sformatf("S2MM Active WSTRB at unexpected memory address! Expected=0x%04h, lane_addr=0x%04h (burst=0x%04h, beat=%0d, lane=%0d, tag 0x%02h)",
+                                   desc.expected_next_byte_addr, lane_addr, t.addr, i, b, desc.tag))
+                        s2mm_addr_errors++;
+                    end
                     byte act_byte = (t.data[i] >> (8 * b)) & 8'hFF;
                     desc.axi_wr_bytes.push_back(act_byte);
+                    desc.expected_next_byte_addr++;
+                end else begin
+                    // Inactive strobe lane: verify that inactive strobes only occur outside payload boundaries
+                    // (e.g. unaligned start offset on first beat or tail offset on last beat)
+                    if (desc.first_burst_seen && lane_addr >= desc.dest_addr && lane_addr < desc.expected_next_byte_addr) begin
+                        `uvm_error("SCB_S2MM_GAP_STRB", $sformatf("S2MM WSTRB gap detected at address 0x%04h inside payload window (burst=0x%04h, beat=%0d, lane=%0d)",
+                                   lane_addr, t.addr, i, b))
+                        s2mm_addr_errors++;
+                    end
                 end
             end
         end
@@ -425,6 +543,7 @@ class dma_scoreboard #(
     // 5.5. S2MM Completion Status Verification
     virtual function void write_dma_wr_status(dma_desc_item_type t);
         s2mm_txn_type desc;
+        int found_idx = -1;
         s2mm_status_count++;
 
         if (!s2mm_by_tag.exists(t.status_tag)) begin
@@ -435,6 +554,19 @@ class dma_scoreboard #(
 
         desc = s2mm_by_tag[t.status_tag];
         desc.status_done = 1'b1;
+
+        // [P2 Fix] Check in-order completion assertion for the single-pipeline S2MM engine
+        if (s2mm_queue.size() > 0 && s2mm_queue[0].tag !== t.status_tag) begin
+            `uvm_error("SCB_S2MM_OOO", $sformatf("S2MM completion status tag 0x%02h arrived out-of-order! Expected queue head tag 0x%02h",
+                       t.status_tag, s2mm_queue[0].tag))
+            s2mm_status_mismatches++;
+        end
+
+        // [P1 Fix] Verify that a complete stream packet was observed before status completion
+        if (desc.packet_count == 0) begin
+            `uvm_error("SCB_S2MM_NO_PKT", $sformatf("S2MM status reported for tag 0x%02h, but no ingress stream packet was observed!", t.status_tag))
+            s2mm_pkt_errors++;
+        end
 
         // Drain any remaining bytes
         compare_s2mm_data(desc);
@@ -472,9 +604,15 @@ class dma_scoreboard #(
             s2mm_status_mismatches++;
         end
 
-        // Clean up completed descriptor
-        if (s2mm_queue.size() > 0 && s2mm_queue[0].tag == t.status_tag) begin
-            void'(s2mm_queue.pop_front());
+        // [P2 Fix] Clean up completed descriptor by tag across both lookup structures
+        foreach (s2mm_queue[i]) begin
+            if (s2mm_queue[i].tag == t.status_tag) begin
+                found_idx = i;
+                break;
+            end
+        end
+        if (found_idx >= 0) begin
+            s2mm_queue.delete(found_idx);
         end
         s2mm_by_tag.delete(t.status_tag);
 
@@ -488,12 +626,17 @@ class dma_scoreboard #(
     virtual function void check_phase(uvm_phase phase);
         super.check_phase(phase);
 
-        if (mm2s_queue.size() != 0) begin
-            `uvm_error("SCB_MM2S_HANG", $sformatf("End of Test Cleanliness: %0d MM2S descriptor(s) never completed!", mm2s_queue.size()))
+        mm2s_hang_count = mm2s_queue.size();
+        s2mm_hang_count = s2mm_queue.size();
+
+        if (mm2s_hang_count != 0) begin
+            `uvm_error("SCB_MM2S_HANG", $sformatf("End of Test Cleanliness: %0d MM2S descriptor(s) never completed! Head tag=0x%02h",
+                       mm2s_hang_count, mm2s_queue[0].tag))
         end
 
-        if (s2mm_queue.size() != 0) begin
-            `uvm_error("SCB_S2MM_HANG", $sformatf("End of Test Cleanliness: %0d S2MM descriptor(s) never completed!", s2mm_queue.size()))
+        if (s2mm_hang_count != 0) begin
+            `uvm_error("SCB_S2MM_HANG", $sformatf("End of Test Cleanliness: %0d S2MM descriptor(s) never completed! Head tag=0x%02h",
+                       s2mm_hang_count, s2mm_queue[0].tag))
         end
     endfunction : check_phase
 
@@ -504,26 +647,32 @@ class dma_scoreboard #(
         bit has_errors;
         super.report_phase(phase);
 
+        // [P2 Fix] Incorporate outstanding queues, packet errors, and address errors into verdict
         has_errors = (mm2s_byte_mismatches > 0) || (mm2s_status_mismatches > 0) ||
-                     (s2mm_byte_mismatches > 0) || (s2mm_len_mismatches > 0)    || (s2mm_status_mismatches > 0);
+                     (s2mm_byte_mismatches > 0) || (s2mm_len_mismatches > 0)    || (s2mm_status_mismatches > 0) ||
+                     (mm2s_pkt_errors > 0)      || (s2mm_pkt_errors > 0)        ||
+                     (mm2s_addr_errors > 0)     || (s2mm_addr_errors > 0)       ||
+                     (mm2s_hang_count > 0)      || (s2mm_hang_count > 0)        ||
+                     (mm2s_queue.size() > 0)    || (s2mm_queue.size() > 0)      ||
+                     (mm2s_by_tag.num() > 0)    || (s2mm_by_tag.num() > 0);
 
-        `uvm_info("SCB_REPORT", "===================================================================================================", UVM_NONE)
-        `uvm_info("SCB_REPORT", "                                AXI4 DMA SCOREBOARD FINAL REPORT                                   ", UVM_NONE)
-        `uvm_info("SCB_REPORT", "===================================================================================================", UVM_NONE)
-        `uvm_info("SCB_REPORT", $sformatf(" MM2S Pipeline : Cmds=%0d, Completed=%0d, Bytes=%0d, Matches=%0d, Mismatches=%0d, StatusErrors=%0d",
-                  mm2s_cmd_count, mm2s_status_count, mm2s_bytes_checked, mm2s_byte_matches, mm2s_byte_mismatches, mm2s_status_mismatches), UVM_NONE)
-        `uvm_info("SCB_REPORT", $sformatf(" S2MM Pipeline : Cmds=%0d, Completed=%0d, Bytes=%0d, Matches=%0d, Mismatches=%0d, LenErrors=%0d",
-                  s2mm_cmd_count, s2mm_status_count, s2mm_bytes_checked, s2mm_byte_matches, s2mm_byte_mismatches, s2mm_len_mismatches), UVM_NONE)
-        `uvm_info("SCB_REPORT", "---------------------------------------------------------------------------------------------------", UVM_NONE)
+        `uvm_info("SCB_REPORT", "========================================================================================================================", UVM_NONE)
+        `uvm_info("SCB_REPORT", "                                            AXI4 DMA SCOREBOARD FINAL REPORT                                            ", UVM_NONE)
+        `uvm_info("SCB_REPORT", "========================================================================================================================", UVM_NONE)
+        `uvm_info("SCB_REPORT", $sformatf(" MM2S Pipeline : Cmds=%0d, Done=%0d, Bytes=%0d, Matches=%0d, Mismatches=%0d, PktErr=%0d, AddrErr=%0d, StatusErr=%0d, Hung=%0d",
+                  mm2s_cmd_count, mm2s_status_count, mm2s_bytes_checked, mm2s_byte_matches, mm2s_byte_mismatches, mm2s_pkt_errors, mm2s_addr_errors, mm2s_status_mismatches, mm2s_hang_count), UVM_NONE)
+        `uvm_info("SCB_REPORT", $sformatf(" S2MM Pipeline : Cmds=%0d, Done=%0d, Bytes=%0d, Matches=%0d, Mismatches=%0d, LenErr=%0d, PktErr=%0d, AddrErr=%0d, StatusErr=%0d, Hung=%0d",
+                  s2mm_cmd_count, s2mm_status_count, s2mm_bytes_checked, s2mm_byte_matches, s2mm_byte_mismatches, s2mm_len_mismatches, s2mm_pkt_errors, s2mm_addr_errors, s2mm_status_mismatches, s2mm_hang_count), UVM_NONE)
+        `uvm_info("SCB_REPORT", "------------------------------------------------------------------------------------------------------------------------", UVM_NONE)
 
         if (!has_errors && (mm2s_cmd_count > 0 || s2mm_cmd_count > 0)) begin
-            `uvm_info("SCB_REPORT", " >>> OVERALL SCOREBOARD VERDICT: [TEST PASSED] - 100% Data & Status Match <<<                     ", UVM_NONE)
+            `uvm_info("SCB_REPORT", " >>> OVERALL SCOREBOARD VERDICT: [TEST PASSED] - 100% Data, Framing & Status Match <<<                                 ", UVM_NONE)
         end else if (has_errors) begin
-            `uvm_error("SCB_REPORT", " >>> OVERALL SCOREBOARD VERDICT: [TEST FAILED] - Data Mismatches or Framing Errors Detected! <<<")
+            `uvm_error("SCB_REPORT", " >>> OVERALL SCOREBOARD VERDICT: [TEST FAILED] - Data Mismatches, Framing Errors, or Hung Transfers Detected! <<<")
         end else begin
-            `uvm_warning("SCB_REPORT", " >>> OVERALL SCOREBOARD VERDICT: [NO TRANSFERS OBSERVED] <<<                                    ")
+            `uvm_warning("SCB_REPORT", " >>> OVERALL SCOREBOARD VERDICT: [NO TRANSFERS OBSERVED] <<<                                                                ")
         end
-        `uvm_info("SCB_REPORT", "===================================================================================================", UVM_NONE)
+        `uvm_info("SCB_REPORT", "========================================================================================================================", UVM_NONE)
     endfunction : report_phase
 
 endclass : dma_scoreboard
