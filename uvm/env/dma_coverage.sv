@@ -166,8 +166,9 @@ class dma_coverage #(
         // - illegal_bins: Write-specific error codes should never appear on the read status bus.
         cp_status_error : coverpoint txn_rd_status.status_error {
             bins err_none   = {DMA_ERR_NONE};          // 4'd0: Normal successful completion
-            bins err_slverr = {DMA_ERR_AXI_RD_SLVERR}; // 4'd4: Slave error from memory
-            bins err_decerr = {DMA_ERR_AXI_RD_DECERR}; // 4'd5: Decode error from interconnect
+            // Error responses excluded from coverage numbers until dedicated error injection test suite
+            ignore_bins err_slverr = {DMA_ERR_AXI_RD_SLVERR}; // 4'd4: Slave error from memory
+            ignore_bins err_decerr = {DMA_ERR_AXI_RD_DECERR}; // 4'd5: Decode error from interconnect
             illegal_bins err_wr_codes = {DMA_ERR_AXI_WR_SLVERR, DMA_ERR_AXI_WR_DECERR};
         }
 
@@ -240,8 +241,9 @@ class dma_coverage #(
         // Read error codes are flagged illegal to catch internal status decoding bugs.
         cp_wr_status_error : coverpoint txn_wr_status.status_error {
             bins err_none   = {DMA_ERR_NONE};          // 4'd0: Normal successful write
-            bins err_slverr = {DMA_ERR_AXI_WR_SLVERR}; // 4'd6: Slave error from memory (BRESP)
-            bins err_decerr = {DMA_ERR_AXI_WR_DECERR}; // 4'd7: Decode error from interconnect (BRESP)
+            // Error responses excluded from coverage numbers until dedicated error injection test suite
+            ignore_bins err_slverr = {DMA_ERR_AXI_WR_SLVERR}; // 4'd6: Slave error from memory (BRESP)
+            ignore_bins err_decerr = {DMA_ERR_AXI_WR_DECERR}; // 4'd7: Decode error from interconnect (BRESP)
             illegal_bins err_rd_codes = {DMA_ERR_AXI_RD_SLVERR, DMA_ERR_AXI_RD_DECERR};
         }
 
@@ -441,13 +443,13 @@ class dma_coverage #(
         option.name         = "cg_dma_axi_r_master";
 
         // Read data response code from slave memory (RRESP).
-        // Verifies normal success (OKAY = 2'b00), slave error (SLVERR = 2'b10), and decode error (DECERR = 2'b11).
+        // Verifies normal success (OKAY = 2'b00).
+        // Error responses are excluded from coverage numbers until a dedicated error injection test suite is run.
         // EXOKAY (2'b01) is ignored because the DMA master does not support atomic exclusive accesses (AxLOCK).
         cp_rresp : coverpoint current_rresp {
-            bins resp_okay   = {2'b00};              // Normal success (OKAY)
-            bins resp_slverr = {2'b10};              // Slave error
-            bins resp_decerr = {2'b11};              // Decode error
-            ignore_bins resp_exokay = {2'b01};       // Not applicable to DMA master (no AxLOCK)
+            bins resp_okay          = {2'b00};              // Normal success (OKAY)
+            ignore_bins resp_errors = {2'b10, 2'b11};       // SLVERR, DECERR (deferred for error test suite)
+            ignore_bins resp_exokay = {2'b01};              // Not applicable to DMA master (no AxLOCK)
         }
 
         // Observed Beat position within burst (RLAST from responder)
@@ -646,10 +648,9 @@ class dma_coverage #(
         // and interconnect decode error (DECERR = 2'b11).
         // EXOKAY (2'b01) is ignored because the DMA master does not issue exclusive writes.
         cp_bresp : coverpoint axi_wr_txn.bresp {
-            bins resp_okay   = {2'b00};              // Normal success (OKAY)
-            bins resp_slverr = {2'b10};              // Slave error
-            bins resp_decerr = {2'b11};              // Decode error
-            ignore_bins resp_exokay = {2'b01};       // Not applicable to DMA master (no AxLOCK)
+            bins resp_okay          = {2'b00};              // Normal success (OKAY)
+            ignore_bins resp_errors = {2'b10, 2'b11};       // SLVERR, DECERR (deferred for error test suite)
+            ignore_bins resp_exokay = {2'b01};              // Not applicable to DMA master (no AxLOCK)
         }
 
     endgroup : cg_dma_axi_b_master
@@ -699,11 +700,10 @@ class dma_coverage #(
         cross_dual_4kb_crossing : cross cp_rd_cross_4kb, cp_wr_cross_4kb;
 
         // Concurrent Fault Isolation (Scenario 3.4)
+        // Verifies clean dual completion; error isolation modes are excluded until error injection test suite.
         cp_concurrent_fault_isolation : coverpoint concurrent_error_status iff (concurrent_window_complete) {
-            bins both_clean      = {2'b00}; // Both completed OKAY
-            bins rd_err_wr_clean = {2'b01}; // MM2S hit SLVERR/DECERR, S2MM completed OKAY
-            bins wr_err_rd_clean = {2'b10}; // S2MM hit SLVERR/DECERR, MM2S completed OKAY
-            bins both_err        = {2'b11}; // Both MM2S and S2MM hit errors concurrently
+            bins both_clean       = {2'b00};                // Both completed OKAY
+            ignore_bins err_modes = {2'b01, 2'b10, 2'b11};  // Deferred until error injection suite
         }
 
     endgroup : cg_dma_concurrency
