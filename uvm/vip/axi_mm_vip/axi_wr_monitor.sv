@@ -180,8 +180,7 @@ class axi_wr_monitor #(
                 `uvm_error("WR_MON", $sformatf("[RESPONDER] BID mismatch: expected AWID=0x%0h, got BID=0x%0h (AWADDR=0x%04h)",
                            desc.id, resp.id, desc.addr))
 
-            `uvm_info("WR_MON", $sformatf("[WRITE COMPLETE] id=0x%0h addr=0x%04h len=%0d beats bresp=2'b%0b",
-                      txn.id, txn.addr, txn.len + 1, txn.bresp), UVM_LOW)
+            `uvm_info("WR_MON", $sformatf("[WRITE COMPLETE] Monitored Write Transaction:\n%s", txn.sprint()), UVM_LOW)
 
             ap.write(txn);
         end

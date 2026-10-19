@@ -210,7 +210,9 @@ class axi_wr_driver #(
         vif.wr_slv_drv_cb.bresp  <= '0;
 
         forever begin
-            wait (slv_aw_q.size() > 0 && slv_w_bursts_done > 0);
+            while (slv_aw_q.size() == 0 || slv_w_bursts_done == 0) begin
+                @(vif.wr_slv_drv_cb);
+            end
             aw_info = slv_aw_q.pop_front();
             slv_w_bursts_done--;
 
@@ -220,9 +222,10 @@ class axi_wr_driver #(
 
             `uvm_info("WR_SLV_B", $sformatf("Slave asserting B response: bid=0x%0h, bresp=OKAY", aw_info.id), UVM_HIGH)
 
-            do begin
+            @(vif.wr_slv_drv_cb);
+            while (!vif.wr_slv_drv_cb.bready) begin
                 @(vif.wr_slv_drv_cb);
-            end while (!vif.wr_slv_drv_cb.bready);
+            end
 
             vif.wr_slv_drv_cb.bvalid <= 1'b0;
             vif.wr_slv_drv_cb.bid    <= '0;

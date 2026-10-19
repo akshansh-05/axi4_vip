@@ -169,7 +169,9 @@ class axi_rd_driver #(
         bit [DATA_WIDTH-1:0] beat_data;
 
         forever begin
-            wait (slv_ar_q.size() > 0);
+            while (slv_ar_q.size() == 0) begin
+                @(vif.rd_slv_drv_cb);
+            end
             ar_info = slv_ar_q.pop_front();
 
             for (int i = 0; i <= ar_info.len; i++) begin
@@ -185,9 +187,10 @@ class axi_rd_driver #(
                 `uvm_info("RD_SLV_R", $sformatf("Slave driving R beat [%0d/%0d]: data=0x%08h, last=%0b",
                           i, ar_info.len, beat_data, (i == ar_info.len)), UVM_FULL)
 
-                do begin
+                @(vif.rd_slv_drv_cb);
+                while (!vif.rd_slv_drv_cb.rready) begin
                     @(vif.rd_slv_drv_cb);
-                end while (!vif.rd_slv_drv_cb.rready);
+                end
             end
 
             vif.rd_slv_drv_cb.rvalid <= 1'b0;

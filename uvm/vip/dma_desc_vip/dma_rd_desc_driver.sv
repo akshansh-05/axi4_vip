@@ -50,7 +50,7 @@ class dma_rd_desc_driver #(
 
         forever begin
             seq_item_port.get_next_item(req);
-            `uvm_info(get_type_name(), $sformatf("Driving Read Descriptor:\n%s", req.sprint()), UVM_HIGH)
+            `uvm_info(get_type_name(), $sformatf("Driving Read Descriptor item received from sequencer:\n%s", req.sprint()), UVM_LOW)
             drive_descriptor(req);
             seq_item_port.item_done();
         end
@@ -70,6 +70,9 @@ class dma_rd_desc_driver #(
         // Optional delay before asserting valid
         repeat (req.valid_delay) @(vif.rd_desc_drv_cb);
 
+        // Synchronize to clock edge before driving signals
+        @(vif.rd_desc_drv_cb);
+
         // Drive descriptor signals
         vif.rd_desc_drv_cb.read_desc_addr  <= req.addr;
         vif.rd_desc_drv_cb.read_desc_len   <= req.len;
@@ -79,10 +82,11 @@ class dma_rd_desc_driver #(
         vif.rd_desc_drv_cb.read_desc_user  <= req.user;
         vif.rd_desc_drv_cb.read_desc_valid <= 1'b1;
 
-        // Wait for handshake: sample at clock edge and check ready
-        do begin
+        // Wait for handshake: sample at clock edge and verify ready
+        @(vif.rd_desc_drv_cb);
+        while (!vif.rd_desc_drv_cb.read_desc_ready) begin
             @(vif.rd_desc_drv_cb);
-        end while (!vif.rd_desc_drv_cb.read_desc_ready);
+        end
 
         // Handshake completed on this clock edge; deassert valid and clear payload
         reset_signals();

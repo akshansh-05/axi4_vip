@@ -42,8 +42,7 @@ class axis_wr_driver #(
 
         forever begin
             seq_item_port.get_next_item(req);
-            `uvm_info(get_type_name(), $sformatf("Driving stream write packet: %0d beats, ID=0x%0x, DEST=0x%0x",
-                      req.data.size(), req.id, req.dest), UVM_HIGH)
+            `uvm_info(get_type_name(), $sformatf("Driving stream write packet received from sequencer:\n%s", req.sprint()), UVM_LOW)
             drive_packet(req);
             seq_item_port.item_done();
         end
@@ -69,7 +68,11 @@ class axis_wr_driver #(
             // Optional inter-beat delay (idle cycles where TVALID remains deasserted)
             if (item.delay.size() > i && item.delay[i] > 0) begin
                 vif.mst_drv_cb.tvalid <= 1'b0;
+                vif.mst_drv_cb.tdata  <= '0;
+                vif.mst_drv_cb.tkeep  <= '0;
                 repeat (item.delay[i]) @(vif.mst_drv_cb);
+            end else if (i == 0) begin
+                @(vif.mst_drv_cb);
             end
 
             // Drive beat payload and attributes
@@ -82,9 +85,10 @@ class axis_wr_driver #(
             vif.mst_drv_cb.tvalid <= 1'b1;
 
             // Wait for handshake: TVALID and TREADY sampled high at clock edge
-            do begin
+            @(vif.mst_drv_cb);
+            while (!vif.mst_drv_cb.tready) begin
                 @(vif.mst_drv_cb);
-            end while (!vif.mst_drv_cb.tready);
+            end
         end
 
         // Clean up interface after packet completes

@@ -15,15 +15,15 @@ interface axis_if #(
     input logic rst
 );
 
-    // Physical Bus Nets
-    logic [DATA_WIDTH-1:0]  tdata;
-    logic [KEEP_WIDTH-1:0]  tkeep;
-    logic                   tvalid;
-    logic                   tready;
-    logic                   tlast;
-    logic [ID_WIDTH-1:0]    tid;
-    logic [DEST_WIDTH-1:0]  tdest;
-    logic [USER_WIDTH-1:0]  tuser;
+    // Physical Bus Nets (wire nets allow bidirectional driver & DUT connections)
+    wire [DATA_WIDTH-1:0]  tdata;
+    wire [KEEP_WIDTH-1:0]  tkeep;
+    wire                   tvalid;
+    wire                   tready;
+    wire                   tlast;
+    wire [ID_WIDTH-1:0]    tid;
+    wire [DEST_WIDTH-1:0]  tdest;
+    wire [USER_WIDTH-1:0]  tuser;
 
     // Clocking Blocks (input #1step samples Preponed; output #0 drives immediately after clock edge)
 

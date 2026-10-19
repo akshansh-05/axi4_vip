@@ -33,11 +33,11 @@
 ../uvm/vip/axi_mm_vip/axi_mm_pkg.sv
 ../uvm/vip/dma_desc_vip/dma_desc_pkg.sv
 ../uvm/vip/axis_vip/axis_pkg.sv
-../uvm/env/axi_ram_env_pkg.sv
+# ../uvm/env/axi_ram_env_pkg.sv (Only needed for Standalone RAM test)
 ../uvm/env/dma_subsystem_env_pkg.sv
-../uvm/sequences/sram_sequences/sram_seq_pkg.sv
+# ../uvm/sequences/sram_sequences/sram_seq_pkg.sv (Only needed for Standalone RAM test)
 ../uvm/sequences/dma_sequences/dma_seq_pkg.sv
-../uvm/tests/sram_tests/sram_test_pkg.sv
+# ../uvm/tests/sram_tests/sram_test_pkg.sv (Only needed for Standalone RAM test)
 ../uvm/tests/dma_tests/dma_test_pkg.sv
 
 # 5. Top-Level Testbench Module

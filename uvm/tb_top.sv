@@ -9,7 +9,9 @@
 `include "uvm_macros.svh"
 import uvm_pkg::*;
 import tb_params_pkg::*;
+`ifdef RAM_STANDALONE
 import sram_test_pkg::*;
+`endif
 import dma_test_pkg::*;
 
 module tb_top;

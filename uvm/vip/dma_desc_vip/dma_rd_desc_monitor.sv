@@ -78,7 +78,7 @@ class dma_rd_desc_monitor #(
         item.dest       = vif.rd_desc_mon_cb.read_desc_dest;
         item.user       = vif.rd_desc_mon_cb.read_desc_user;
 
-        `uvm_info("RD_DESC_MON", $sformatf("Sampled Read Descriptor Command:\n%s", item.sprint()), UVM_MEDIUM)
+        `uvm_info("RD_DESC_MON", $sformatf("Sampled Read Descriptor Command:\n%s", item.sprint()), UVM_LOW)
 
         if (pending_cmds.exists(item.tag)) begin
             `uvm_error("RD_DESC_MON", $sformatf("Duplicate outstanding command tag detected: tag=0x%02x is already pending!", item.tag))
@@ -114,8 +114,7 @@ class dma_rd_desc_monitor #(
         item.status_tag   = s_tag;
         item.status_error = dma_error_e'(vif.rd_desc_mon_cb.read_desc_status_error);
 
-        `uvm_info("RD_DESC_MON", $sformatf("Sampled Read Descriptor Status: tag=0x%02x, error=%s (0x%0x)",
-                  item.status_tag, item.status_error.name(), item.status_error), UVM_MEDIUM)
+        `uvm_info("RD_DESC_MON", $sformatf("Sampled Read Descriptor Status:\n%s", item.sprint()), UVM_LOW)
         status_ap.write(item);
     endfunction : process_status
 

@@ -121,9 +121,7 @@ class axis_wr_monitor #(
 
         item.id   = captured_id;
         item.dest = captured_dest;
-
-        `uvm_info(get_type_name(), $sformatf("Collected write stream packet: %0d beats, ID=0x%0x, DEST=0x%0x, stalls=%0d",
-                  item.data.size(), item.id, item.dest, item.ready_delay), UVM_HIGH)
+        `uvm_info(get_type_name(), $sformatf("Sampled Stream Write Packet:\n%s", item.sprint()), UVM_LOW)
 
         ap.write(item);
     endtask : collect_packet

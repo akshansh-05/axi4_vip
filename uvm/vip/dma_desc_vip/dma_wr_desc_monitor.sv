@@ -74,7 +74,7 @@ class dma_wr_desc_monitor #(
         item.len        = vif.wr_desc_mon_cb.write_desc_len;
         item.tag        = vif.wr_desc_mon_cb.write_desc_tag;
 
-        `uvm_info("WR_DESC_MON", $sformatf("Sampled Write Descriptor Command:\n%s", item.sprint()), UVM_MEDIUM)
+        `uvm_info("WR_DESC_MON", $sformatf("Sampled Write Descriptor Command:\n%s", item.sprint()), UVM_LOW)
 
         if (pending_cmds.exists(item.tag)) begin
             `uvm_error("WR_DESC_MON", $sformatf("Duplicate outstanding command tag detected: tag=0x%02x is already pending!", item.tag))
@@ -114,8 +114,7 @@ class dma_wr_desc_monitor #(
         item.status_user  = vif.wr_desc_mon_cb.write_desc_status_user;
         item.status_error = dma_error_e'(vif.wr_desc_mon_cb.write_desc_status_error);
 
-        `uvm_info("WR_DESC_MON", $sformatf("Sampled Write Descriptor Status: tag=0x%02x, len=%0d, error=%s (0x%0x)",
-                  item.status_tag, item.status_len, item.status_error.name(), item.status_error), UVM_MEDIUM)
+        `uvm_info("WR_DESC_MON", $sformatf("Sampled Write Descriptor Status:\n%s", item.sprint()), UVM_LOW)
         status_ap.write(item);
     endfunction : process_status
 

@@ -18,6 +18,7 @@ class axis_packet_seq #(
     int unsigned min_beats            = 1;       // Minimum beats per packet
     int unsigned max_beats            = 16;      // Maximum beats per packet
     bit          force_full_last_keep = 0;       // Force last beat TKEEP to all 1s (full word)
+    int unsigned max_delay            = 0;       // Max inter-beat idle cycles (default 0 for back-to-back streaming)
 
     `uvm_object_param_utils(axis_packet_seq #(DATA_WIDTH, KEEP_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH))
 
@@ -33,12 +34,24 @@ class axis_packet_seq #(
 
             start_item(pkt);
 
-            assert(pkt.randomize() with {
-                data.size() inside {[min_beats:max_beats]};
-                if (force_full_last_keep) {
-                    keep[data.size()-1] == {KEEP_WIDTH{1'b1}};
-                }
-            }) else `uvm_error(get_type_name(), "Randomization failed for axis_packet_seq");
+            if (force_full_last_keep) begin
+                assert(pkt.randomize() with {
+                    data.size() inside {[min_beats:max_beats]};
+                    foreach (delay[i]) {
+                        delay[i] <= local::max_delay;
+                    }
+                    foreach (keep[i]) {
+                        keep[i] == {KEEP_WIDTH{1'b1}};
+                    }
+                }) else `uvm_error(get_type_name(), "Randomization failed for axis_packet_seq");
+            end else begin
+                assert(pkt.randomize() with {
+                    data.size() inside {[min_beats:max_beats]};
+                    foreach (delay[i]) {
+                        delay[i] <= local::max_delay;
+                    }
+                }) else `uvm_error(get_type_name(), "Randomization failed for axis_packet_seq");
+            end
 
             `uvm_info(get_type_name(), $sformatf("Sending packet [%0d/%0d]:\n%s",
                       p+1, num_packets, pkt.sprint()), UVM_MEDIUM)

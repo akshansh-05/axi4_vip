@@ -40,3 +40,4 @@ Thumbs.db
 *.db
 .vscode/
 .idea/
+*.tar.gz

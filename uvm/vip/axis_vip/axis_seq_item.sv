@@ -58,6 +58,14 @@ class axis_seq_item #(
         soft ready_delay inside {[0:5]};
     }
 
+    constraint c_sideband_tie_low {
+        id   == '0;
+        dest == '0;
+        foreach (user[i]) {
+            user[i] == '0;
+        }
+    }
+
     // UVM Field Automation Macros
     `uvm_object_param_utils_begin(axis_seq_item #(DATA_WIDTH, KEEP_WIDTH, ID_WIDTH, DEST_WIDTH, USER_WIDTH))
         `uvm_field_array_int(data,         UVM_ALL_ON | UVM_HEX)

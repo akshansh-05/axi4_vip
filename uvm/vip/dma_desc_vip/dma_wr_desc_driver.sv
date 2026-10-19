@@ -52,7 +52,7 @@ class dma_wr_desc_driver #(
 
         forever begin
             seq_item_port.get_next_item(req);
-            `uvm_info(get_type_name(), $sformatf("Driving Write Descriptor:\n%s", req.sprint()), UVM_HIGH)
+            `uvm_info(get_type_name(), $sformatf("Driving Write Descriptor item received from sequencer:\n%s", req.sprint()), UVM_LOW)
             drive_descriptor(req);
             seq_item_port.item_done();
         end
@@ -69,16 +69,20 @@ class dma_wr_desc_driver #(
         // Optional delay before asserting valid
         repeat (req.valid_delay) @(vif.wr_desc_drv_cb);
 
+        // Synchronize to clock edge before driving signals
+        @(vif.wr_desc_drv_cb);
+
         // Drive descriptor signals
         vif.wr_desc_drv_cb.write_desc_addr  <= req.addr;
         vif.wr_desc_drv_cb.write_desc_len   <= req.len;
         vif.wr_desc_drv_cb.write_desc_tag   <= req.tag;
         vif.wr_desc_drv_cb.write_desc_valid <= 1'b1;
 
-        // Wait for handshake: sample at clock edge and check ready
-        do begin
+        // Wait for handshake: sample at clock edge and verify ready
+        @(vif.wr_desc_drv_cb);
+        while (!vif.wr_desc_drv_cb.write_desc_ready) begin
             @(vif.wr_desc_drv_cb);
-        end while (!vif.wr_desc_drv_cb.write_desc_ready);
+        end
 
         // Handshake completed on this clock edge; deassert valid and clear payload
         reset_signals();

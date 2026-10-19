@@ -77,6 +77,7 @@ class axis_rd_driver #(
 
         forever begin
             seq_item_port.get_next_item(req);
+            `uvm_info(get_type_name(), $sformatf("Driving stream read response item received from sequencer:\n%s", req.sprint()), UVM_LOW)
 
             // 1. If sequence specified backpressure, deassert TREADY for exact N cycles
             if (req.ready_delay > 0) begin

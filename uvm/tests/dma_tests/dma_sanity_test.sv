@@ -61,6 +61,7 @@ class dma_sanity_test extends dma_base_test;
         axis_pkt_seq.min_beats            = 16;
         axis_pkt_seq.max_beats            = 16;
         axis_pkt_seq.force_full_last_keep = 1'b1; // Guarantee all 4 byte lanes on final beat (exactly 64 bytes)
+        axis_pkt_seq.max_delay            = 0;    // Back-to-back streaming without random idle bubbles
 
         fork
             begin
