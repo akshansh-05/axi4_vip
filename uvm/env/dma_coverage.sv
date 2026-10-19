@@ -76,6 +76,8 @@ class dma_coverage #(
     int                  total_wr_beats;
     bit                  is_wlast;
     bit                  is_wr_final_beat;
+    int                  current_wr_beat_idx;
+    int                  last_wr_stream_bytes;
 
     // Concurrency state tracking (Feature 3 Full-Duplex)
     bit                  mm2s_in_flight;
@@ -133,6 +135,7 @@ class dma_coverage #(
         // - multi_page_len: > 4096 bytes. Multi-page transfer crossing one or more 4KB boundaries,
         //   forcing the burst scheduler to repeatedly clamp and restart at each page edge.
         cp_transfer_len : coverpoint txn_rd_cmd.len {
+            illegal_bins zero_len = {0};              // 0-length transfer is illegal in AXI DMA
             bins sub_word_len     = {[1 : 3]};        // < 1 word: single beat with TKEEP masking
             bins single_burst_len = {[4 : 64]};       // 1 to 16 beats: single AXI burst (no FSM loop)
             bins multi_burst_len  = {[65 : 4096]};     // Multiple AXI bursts within a page (FSM loops)
@@ -168,6 +171,17 @@ class dma_coverage #(
             illegal_bins err_wr_codes = {DMA_ERR_AXI_WR_SLVERR, DMA_ERR_AXI_WR_DECERR};
         }
 
+        // Completed read transfer byte length (correlates stimulus size with completion outcome)
+        cp_completed_rd_len : coverpoint txn_rd_status.len {
+            bins sub_word_len     = {[1 : 3]};
+            bins single_burst_len = {[4 : 64]};
+            bins multi_burst_len  = {[65 : 4096]};
+            bins multi_page_len   = {[4097 : 65535]};
+        }
+
+        // Cross completed transfer length with completion status
+        cross_rd_len_x_status : cross cp_completed_rd_len, cp_status_error;
+
     endgroup : cg_dma_rd_desc_status
 
     // Covergroup 3: DMA Write Descriptor Channel (Command) [Tier 1]
@@ -199,6 +213,7 @@ class dma_coverage #(
         // Grouped into the same 4 hardware operational domains as the read channel:
         // sub-word (<4B), single burst (4-64B), multi-burst (65-4096B), and multi-page (>4KB).
         cp_wr_buffer_len : coverpoint txn_wr_cmd.len {
+            illegal_bins zero_len = {0};              // 0-length buffer is illegal in AXI DMA
             bins sub_word_len     = {[1 : 3]};        // < 1 word: single beat with WSTRB masking
             bins single_burst_len = {[4 : 64]};       // 1 to 16 beats: single AXI burst
             bins multi_burst_len  = {[65 : 4096]};     // Multiple AXI bursts within a page
@@ -235,14 +250,39 @@ class dma_coverage #(
         // - early_stream_tlast: Stream asserted TLAST before buffer filled (Scenario 2.7).
         //   The DMA terminates the descriptor early and reports actual received byte count.
         // - zero_byte_abort: Immediate TLAST or error abort before any bytes written (status_len == 0).
+        // Traps hardware buffer overruns into illegal_bins overrun (Defect D3 fix).
         cp_wr_status_len : coverpoint (
             (txn_wr_status.status_len == txn_wr_status.len) ? 2 :
-            ((txn_wr_status.status_len < txn_wr_status.len) && (txn_wr_status.status_len > 0)) ? 1 : 0
+            (txn_wr_status.status_len == 0)                 ? 0 :
+            (txn_wr_status.status_len < txn_wr_status.len)  ? 1 : 3
         ) {
             bins full_buffer_transfer = {2}; // status_len == len (stream filled the buffer)
             bins early_stream_tlast   = {1}; // status_len < len  (stream ended early via TLAST)
-            bins zero_byte_abort      = {0}; // status_len == 0   (zero-length transfer)
+            bins zero_byte_abort      = {0}; // status_len == 0   (zero-byte transfer)
+            illegal_bins overrun      = {3}; // status_len > len  (hardware buffer overflow bug!)
         }
+
+        // Scenario 2.8: Ingress stream byte length vs host buffer capacity
+        // Verifies exact-fit, early-TLAST (Scenario 2.7), and excess-stream-data draining in STATE_DROP_DATA (Scenario 2.8)
+        cp_stream_vs_desc_len : coverpoint (
+            (last_wr_stream_bytes == txn_wr_status.len) ? 2 :
+            (last_wr_stream_bytes < txn_wr_status.len)  ? 1 : 0
+        ) {
+            bins stream_exact_buffer  = {2}; // Stream bytes matches buffer size exactly
+            bins stream_shorter_tlast = {1}; // Stream ends early via TLAST (Scenario 2.7)
+            bins stream_excess_drop   = {0}; // Stream exceeds buffer, extra beats dropped (Scenario 2.8)
+        }
+
+        // Completed write buffer capacity
+        cp_completed_wr_len : coverpoint txn_wr_status.len {
+            bins sub_word_len     = {[1 : 3]};
+            bins single_burst_len = {[4 : 64]};
+            bins multi_burst_len  = {[65 : 4096]};
+            bins multi_page_len   = {[4097 : 65535]};
+        }
+
+        // Cross completed write buffer size with completion status
+        cross_wr_len_x_status : cross cp_completed_wr_len, cp_wr_status_error;
 
     endgroup : cg_dma_wr_desc_status
 
@@ -316,9 +356,8 @@ class dma_coverage #(
         }
 
         // Upstream transmitter bubbles: idle cycles between valid ingress beats (TVALID stalls).
-        // Tests the S2MM input datapath's ability to hold partial words across stalls
-        // without dropping data or prematurely triggering an AXI write burst.
-        cp_wr_inter_beat_delay : coverpoint current_wr_delay {
+        // Evaluated only between consecutive beats (beat_idx > 0) to avoid false hits on beat 0 (Defect D4 fix).
+        cp_wr_inter_beat_delay : coverpoint current_wr_delay iff (current_wr_beat_idx > 0) {
             bins back_to_back = {0};             // Consecutive beats (0 cycle bubble)
             bins short_pause  = {[1 : 3]};       // 1-3 cycle pause between beats
             bins med_pause    = {[4 : 10]};      // Moderate producer pacing
@@ -372,23 +411,24 @@ class dma_coverage #(
         }
 
         // 4KB memory page offset (ARADDR[11:0]).
-        // Verifies address generation at page start, mid-page, and near the 4KB boundary.
+        // Starts at 0xFC0-0xFC3 can legally issue a full 16-beat burst (64B) ending exactly at 0x1000.
+        // Starts in 0xFC4-0xFFF are clamped to ARLEN <= 14 by the page boundary (Defect D1 fix).
         cp_ar_page_offset : coverpoint axi_rd_txn.addr[11:0] {
-            bins page_start    = {12'h000};             // Exactly at page boundary
-            bins mid_page      = {[12'h001 : 12'hFBF]}; // Normal intra-page transfer
-            bins near_page_end = {[12'hFC0 : 12'hFFF]}; // Within 64 bytes of 4KB edge (triggers burst clamping)
+            bins page_start      = {12'h000};             // Exactly at page boundary
+            bins mid_page        = {[12'h001 : 12'hFBF]}; // Normal intra-page transfer
+            bins end_fits_16beat = {[12'hFC0 : 12'hFC3]}; // Legal ARLEN=15 max burst ending at 0x1000
+            bins end_clamped     = {[12'hFC4 : 12'hFFF]}; // ARLEN<=14 clamped by page boundary
         }
 
         // Cross address alignment with burst lengths
         cross_ar_align_x_len : cross cp_ar_addr_align, cp_ar_len;
 
         // Cross page offset with burst lengths.
-        // Near page end with max burst (16 beats = 64B) is physically impossible because
-        // the DMA address generator clamps ARLEN to avoid crossing the 4KB boundary,
-        // so it is appropriately marked with ignore_bins.
+        // Starts at end_clamped (0xFC4-0xFFF) with max burst (16 beats) is physically impossible because
+        // hardware clamps ARLEN to avoid crossing the 4KB boundary, so it is ignored.
         cross_ar_offset_x_len : cross cp_ar_page_offset, cp_ar_len {
-            ignore_bins impossible_max_burst_at_page_end = 
-                binsof(cp_ar_page_offset.near_page_end) && binsof(cp_ar_len.max_burst);
+            ignore_bins clamp_excludes_max = 
+                binsof(cp_ar_page_offset.end_clamped) && binsof(cp_ar_len.max_burst);
         }
 
     endgroup : cg_dma_axi_ar_master
@@ -485,22 +525,22 @@ class dma_coverage #(
         }
 
         // 4KB Page Offset (AWADDR[11:0]).
-        // Verifies address generation at page start, mid-page, and near the 4KB boundary.
+        // Starts at 0xFC0-0xFC3 can legally issue a full 16-beat burst (64B) ending exactly at 0x1000.
+        // Starts in 0xFC4-0xFFF are clamped to AWLEN <= 14 by the page boundary (Defect D1 fix).
         cp_aw_page_offset : coverpoint axi_wr_txn.addr[11:0] {
-            bins page_start    = {12'h000};             // Exactly at page boundary
-            bins mid_page      = {[12'h001 : 12'hFBF]}; // Normal intra-page transfer
-            bins near_page_end = {[12'hFC0 : 12'hFFF]}; // Within 64 bytes of 4KB edge (triggers burst clamping)
+            bins page_start      = {12'h000};             // Exactly at page boundary
+            bins mid_page        = {[12'h001 : 12'hFBF]}; // Normal intra-page transfer
+            bins end_fits_16beat = {[12'hFC0 : 12'hFC3]}; // Legal AWLEN=15 max burst ending at 0x1000
+            bins end_clamped     = {[12'hFC4 : 12'hFFF]}; // AWLEN<=14 clamped by page boundary
         }
 
         // Cross address alignment with burst length (4 x 3 = 12 bins)
         cross_aw_align_x_len : cross cp_aw_addr_align, cp_aw_len;
 
         // Cross 4KB page offset with burst length.
-        // Near page end with max burst (16 beats) is physically impossible because
-        // hardware clamps tr_word_count at the 4KB boundary, so it is ignored.
         cross_aw_offset_x_len : cross cp_aw_page_offset, cp_aw_len {
-            ignore_bins impossible_max_burst_at_page_end = 
-                binsof(cp_aw_page_offset.near_page_end) && binsof(cp_aw_len.max_burst);
+            ignore_bins clamp_excludes_max = 
+                binsof(cp_aw_page_offset.end_clamped) && binsof(cp_aw_len.max_burst);
         }
 
     endgroup : cg_dma_axi_aw_master
@@ -622,10 +662,11 @@ class dma_coverage #(
         option.name = "cg_dma_concurrency";
 
         // Subsystem Operating Mode (Scenario 3.1)
-        cp_concurrency_mode : coverpoint {s2mm_in_flight, mm2s_in_flight} {
-            bins simplex_rd_only = {2'b01}; // MM2S active, S2MM idle
-            bins simplex_wr_only = {2'b10}; // S2MM active, MM2S idle
-            bins full_duplex     = {2'b11}; // Both engines actively executing concurrently!
+        // Guarded with iff (!concurrent_window_complete) so window completions do not falsely
+        // sample decaying simplex states (Defect D2 fix).
+        // Guarded with iff (s2mm_in_flight && mm2s_in_flight) so full_duplex is strictly evaluated during concurrency.
+        cp_concurrency_mode : coverpoint {s2mm_in_flight, mm2s_in_flight} iff (s2mm_in_flight && mm2s_in_flight && !concurrent_window_complete) {
+            bins full_duplex = {2'b11}; // Both engines actively executing concurrently!
         }
 
         // Concurrent Transfer Length Scale (Scenario 3.3 Asymmetric Load)
@@ -662,6 +703,7 @@ class dma_coverage #(
             bins both_clean      = {2'b00}; // Both completed OKAY
             bins rd_err_wr_clean = {2'b01}; // MM2S hit SLVERR/DECERR, S2MM completed OKAY
             bins wr_err_rd_clean = {2'b10}; // S2MM hit SLVERR/DECERR, MM2S completed OKAY
+            bins both_err        = {2'b11}; // Both MM2S and S2MM hit errors concurrently
         }
 
     endgroup : cg_dma_concurrency
@@ -795,11 +837,26 @@ class dma_coverage #(
 
     // 6. Stream Write (Ingress) Tap
     virtual function void write_axis_wr(axis_item_type t);
+        int total_bytes = 0;
         this.axis_wr_txn = t;
+
+        // Compute total ingress stream bytes in this packet for Scenario 2.8 coverage
+        foreach (t.data[i]) begin
+            if (i == t.data.size() - 1) begin
+                for (int b = 0; b < STRB_WIDTH; b++) begin
+                    if (t.keep[i][b]) total_bytes++;
+                end
+            end else begin
+                total_bytes += STRB_WIDTH;
+            end
+        end
+        last_wr_stream_bytes = total_bytes;
+
         foreach (axis_wr_txn.keep[i]) begin
-            current_wr_tkeep = axis_wr_txn.keep[i];
-            current_wr_delay = (i < axis_wr_txn.delay.size()) ? axis_wr_txn.delay[i] : 0;
-            is_wr_last_beat  = (i == axis_wr_txn.keep.size() - 1);
+            current_wr_tkeep    = axis_wr_txn.keep[i];
+            current_wr_delay    = (i < axis_wr_txn.delay.size()) ? axis_wr_txn.delay[i] : 0;
+            current_wr_beat_idx = i;
+            is_wr_last_beat     = (i == axis_wr_txn.keep.size() - 1);
             cg_axis_wr_stream.sample();
         end
     endfunction : write_axis_wr
