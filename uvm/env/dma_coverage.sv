@@ -868,7 +868,7 @@ class dma_coverage #(
 
         foreach (axi_rd_txn.rresp[i]) begin
             current_rresp    = axi_rd_txn.rresp[i];
-            is_rlast         = (i < axi_rd_txn.rlast.size()) ? axi_rd_txn.rlast[i] : 1'b0;
+            is_rlast         = (axi_rd_txn.rlast.size() > 0 && i < axi_rd_txn.rlast.size()) ? axi_rd_txn.rlast[i] : (i == axi_rd_txn.rresp.size() - 1);
             is_rd_final_beat = (i == axi_rd_txn.rresp.size() - 1);
             cg_dma_axi_r_master.sample();
         end
@@ -883,7 +883,7 @@ class dma_coverage #(
         foreach (axi_wr_txn.strb[i]) begin
             current_wstrb    = axi_wr_txn.strb[i];
             wr_beat_idx      = i;
-            is_wlast         = (i < axi_wr_txn.wlast.size()) ? axi_wr_txn.wlast[i] : 1'b0;
+            is_wlast         = (axi_wr_txn.wlast.size() > 0 && i < axi_wr_txn.wlast.size()) ? axi_wr_txn.wlast[i] : (i == total_wr_beats - 1);
             is_wr_final_beat = (i == total_wr_beats - 1);
             cg_dma_axi_w_master.sample();
         end
