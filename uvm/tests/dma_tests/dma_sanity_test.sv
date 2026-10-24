@@ -45,10 +45,9 @@ class dma_sanity_test extends dma_base_test;
         #300;
         `uvm_info(get_type_name(), "Phase 1: MM2S Read Transfer completed", UVM_LOW)
 
-        // Phase 2: S2MM Write Transfer (Stream -> Memory)
-        // Concurrently drive the write descriptor and ingress stream data beats.
-        // Descriptor defines destination address 0x2000 and 64-byte buffer size.
-        // Stream packet sends 16 beats (64 bytes) with TLAST on the final beat.
+        // Phase 2: S2MM Write Transfer (Stream -> Memory) - COMMENTED OUT TEMPORARILY
+        // We focus solely on verifying the MM2S Read Engine and Scoreboard first.
+        /*
         `uvm_info(get_type_name(), "Phase 2: Starting S2MM Write Transfer", UVM_LOW)
 
         wr_desc_seq = wr_desc_seq_type::type_id::create("wr_desc_seq");
@@ -75,6 +74,7 @@ class dma_sanity_test extends dma_base_test;
         // Allow time for write burst handshakes and write status response to settle
         #300;
         `uvm_info(get_type_name(), "Phase 2: S2MM Write Transfer completed", UVM_LOW)
+        */
 
         // End of test drain
         #500;

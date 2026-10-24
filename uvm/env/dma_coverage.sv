@@ -9,16 +9,43 @@
 `ifndef DMA_COVERAGE_SV
 `define DMA_COVERAGE_SV
 
-// Declare analysis port implementation suffixes for multi-channel subscriber monitoring
-`ifndef DMA_IMP_DECLS
-`define DMA_IMP_DECLS
+`ifndef DMA_RD_CMD_IMP_DECL
+`define DMA_RD_CMD_IMP_DECL
 `uvm_analysis_imp_decl(_dma_rd_cmd)
+`endif
+
+`ifndef DMA_RD_STATUS_IMP_DECL
+`define DMA_RD_STATUS_IMP_DECL
 `uvm_analysis_imp_decl(_dma_rd_status)
+`endif
+
+`ifndef DMA_WR_CMD_IMP_DECL
+`define DMA_WR_CMD_IMP_DECL
 `uvm_analysis_imp_decl(_dma_wr_cmd)
+`endif
+
+`ifndef DMA_WR_STATUS_IMP_DECL
+`define DMA_WR_STATUS_IMP_DECL
 `uvm_analysis_imp_decl(_dma_wr_status)
+`endif
+
+`ifndef AXIS_RD_IMP_DECL
+`define AXIS_RD_IMP_DECL
 `uvm_analysis_imp_decl(_axis_rd)
+`endif
+
+`ifndef AXIS_WR_IMP_DECL
+`define AXIS_WR_IMP_DECL
 `uvm_analysis_imp_decl(_axis_wr)
+`endif
+
+`ifndef AXI_RD_IMP_DECL
+`define AXI_RD_IMP_DECL
 `uvm_analysis_imp_decl(_axi_rd)
+`endif
+
+`ifndef AXI_WR_IMP_DECL
+`define AXI_WR_IMP_DECL
 `uvm_analysis_imp_decl(_axi_wr)
 `endif
 

@@ -1,7 +1,9 @@
 # RTL Sources (Managed in Separate Repository)
 axi_master_rtl/
 axi_slave_rtl/
+rtl
 rtl/
+*.jsonl
 
 # Cadence Xcelium & Simulator Artifacts
 xcelium.d/

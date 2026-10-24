@@ -1,13 +1,12 @@
 // File: axi_rd_monitor.sv
 // Dedicated UVM Monitor for AXI4 Memory-Mapped Read Channels (AR, R).
 // Passively snoops AR and R channels strictly through rd_mon_cb clocking block,
-// reconstructs complete burst transactions, and broadcasts them via analysis port.
+// reconstructs complete burst transactions, and broadcasts them via analysis port to Scoreboard/Coverage Collector.
 //
 // Signal Direction Boundaries (DMA Master topology):
-//   DUT Master outputs → AR channel (ARID, ARADDR, ARLEN, ARSIZE, ARBURST, ARVALID)
-//                        R  channel (RREADY)
-//   Responder Slave outputs → AR channel (ARREADY)
-//                             R  channel (RID, RDATA, RRESP, RLAST, RVALID)
+//   DUT Master outputs ---> AR channel (ARID, ARADDR, ARLEN, ARSIZE, ARBURST, ARVALID)
+//   Responder Slave outputs ---> AR channel (ARREADY)
+//    R channel (RREADY) <--- Responder Slave outputs - R channel (RID, RDATA, RRESP, RLAST, RVALID)
 //
 // Protocol checks: RLAST and RID are responder-driven signals. Framing checks
 // on these catch TB/slave bugs, not DUT bugs. DUT-checkable outputs from the
@@ -109,13 +108,14 @@ class axi_rd_monitor #(
             txn.rid   = new[desc.len + 1];
             txn.rlast = new[desc.len + 1];
 
-            beat_idx = 0;
+            beat_idx = 0; // initialization of beat index for storing data from R channel
+            
             // Architectural Note: This monitor collects transactions strictly on accepted handshakes
             // (rvalid && rready). It purposefully omits cycle-level latency/delay variables when RREADY
             // is driven low by the DUT master; downstream receiver backpressure is tracked at the AXI-Stream VIP.
             while (beat_idx <= desc.len) begin
                 @(vif.rd_mon_cb);
-                if (vif.rd_mon_cb.rvalid && vif.rd_mon_cb.rready) begin
+                if (vif.rd_mon_cb.rvalid && vif.rd_mon_cb.rready) begin //checking for ready and valid signals to accept the data
                     txn.data[beat_idx]  = vif.rd_mon_cb.rdata;
                     txn.rresp[beat_idx] = vif.rd_mon_cb.rresp;
                     txn.rid[beat_idx]   = vif.rd_mon_cb.rid;

@@ -15,7 +15,7 @@ package dma_subsystem_env_pkg;
     import dma_desc_pkg::*;
     import axis_pkg::*;
 
-    // `include "dma_scoreboard.sv"
+    `include "dma_scoreboard.sv"
     `include "dma_coverage.sv"
     `include "dma_subsystem_env.sv"
 
