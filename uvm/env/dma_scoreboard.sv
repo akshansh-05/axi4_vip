@@ -30,10 +30,7 @@
 `uvm_analysis_imp_decl(_axi_rd)
 `endif
 
-// =============================================================================
 // Helper Descriptor Tracking Class for MM2S
-// =============================================================================
-
 class mm2s_desc_txn #(
     parameter ADDR_WIDTH = 16,
     parameter LEN_WIDTH  = 20,
@@ -69,10 +66,7 @@ class mm2s_desc_txn #(
     endfunction
 endclass : mm2s_desc_txn
 
-// =============================================================================
 // Top DMA Scoreboard Component (MM2S Read Engine Focus)
-// =============================================================================
-
 class dma_scoreboard #(
     parameter DATA_WIDTH = 32,
     parameter ADDR_WIDTH = 16,
@@ -92,23 +86,17 @@ class dma_scoreboard #(
 
     typedef mm2s_desc_txn #(ADDR_WIDTH, LEN_WIDTH, TAG_WIDTH) mm2s_txn_type;
 
-    // -------------------------------------------------------------------------
     // 1. Analysis Exports (MM2S Ports)
-    // -------------------------------------------------------------------------
     uvm_analysis_imp_dma_rd_cmd    #(dma_desc_item_type, dma_scoreboard #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH, LEN_WIDTH, TAG_WIDTH, DEST_WIDTH, USER_WIDTH)) imp_dma_rd_cmd;
     uvm_analysis_imp_dma_rd_status #(dma_desc_item_type, dma_scoreboard #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH, LEN_WIDTH, TAG_WIDTH, DEST_WIDTH, USER_WIDTH)) imp_dma_rd_status;
     uvm_analysis_imp_axis_rd       #(axis_item_type,     dma_scoreboard #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH, LEN_WIDTH, TAG_WIDTH, DEST_WIDTH, USER_WIDTH)) imp_axis_rd;
     uvm_analysis_imp_axi_rd        #(axi_item_type,      dma_scoreboard #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH, LEN_WIDTH, TAG_WIDTH, DEST_WIDTH, USER_WIDTH)) imp_axi_rd;
 
-    // -------------------------------------------------------------------------
     // 2. Internal Tracking Data Structures
-    // -------------------------------------------------------------------------
     mm2s_txn_type mm2s_queue[$];
     mm2s_txn_type mm2s_by_tag[bit [TAG_WIDTH-1:0]];
 
-    // -------------------------------------------------------------------------
     // 3. Verification Statistics
-    // -------------------------------------------------------------------------
     int unsigned mm2s_cmd_count          = 0;
     int unsigned mm2s_status_count       = 0;
     int unsigned mm2s_bytes_checked      = 0;
@@ -119,9 +107,7 @@ class dma_scoreboard #(
     int unsigned mm2s_status_mismatches  = 0;
     int unsigned mm2s_hang_count         = 0;
 
-    // -------------------------------------------------------------------------
     // Constructor
-    // -------------------------------------------------------------------------
     function new(string name = "dma_scoreboard", uvm_component parent = null);
         super.new(name, parent);
         imp_dma_rd_cmd    = new("imp_dma_rd_cmd", this);
@@ -130,9 +116,7 @@ class dma_scoreboard #(
         imp_axi_rd        = new("imp_axi_rd", this);
     endfunction : new
 
-    // =========================================================================
     // Stage 1: Command Registration (dma_rd_desc_monitor -> cmd_ap)
-    // =========================================================================
     virtual function void write_dma_rd_cmd(dma_desc_item_type t);
         mm2s_txn_type desc;
 
@@ -141,7 +125,7 @@ class dma_scoreboard #(
         desc.xfer_len                 = t.len;
         desc.tag                      = t.tag;
         desc.total_bytes_expected     = t.len;
-        desc.expected_next_burst_addr = t.addr & ~(STRB_WIDTH - 1);
+        desc.expected_next_burst_addr = t.addr;
         desc.cmd_seen                 = 1'b1;
 
         mm2s_queue.push_back(desc);
@@ -152,9 +136,7 @@ class dma_scoreboard #(
                   t.tag, t.addr, t.len), UVM_MEDIUM)
     endfunction : write_dma_rd_cmd
 
-    // =========================================================================
     // Stage 2: Memory Read Slicing & Burst Address Progression (axi_rd_monitor -> ap)
-    // =========================================================================
     virtual function void write_axi_rd(axi_item_type t);
         mm2s_txn_type desc;
 
@@ -171,7 +153,7 @@ class dma_scoreboard #(
                        desc.tag, desc.expected_next_burst_addr, t.addr))
             mm2s_addr_errors++;
         end
-        desc.expected_next_burst_addr += ((t.len + 1) * STRB_WIDTH);
+        desc.expected_next_burst_addr = (t.addr & ~(STRB_WIDTH - 1)) + ((t.len + 1) * STRB_WIDTH);
 
         // 2. Unpack 32-bit read data words into individual byte stream (Windowing)
         for (int i = 0; i <= t.len; i++) begin
@@ -188,9 +170,7 @@ class dma_scoreboard #(
         compare_mm2s_data(desc);
     endfunction : write_axi_rd
 
-    // =========================================================================
     // Stage 3: Egress Stream Collection & Packet Framing (axis_rd_monitor -> ap)
-    // =========================================================================
     virtual function void write_axis_rd(axis_item_type t);
         mm2s_txn_type desc;
         int unsigned pkt_bytes = 0;
@@ -239,9 +219,7 @@ class dma_scoreboard #(
         end
     endfunction : write_axis_rd
 
-    // =========================================================================
     // Stage 4: Incremental Pair-Wise Comparator
-    // =========================================================================
     virtual function void compare_mm2s_data(mm2s_txn_type desc);
         while (desc.expected_bytes.size() > 0 && desc.actual_bytes.size() > 0) begin
             byte exp_b = desc.expected_bytes.pop_front();
@@ -259,9 +237,7 @@ class dma_scoreboard #(
         end
     endfunction : compare_mm2s_data
 
-    // =========================================================================
     // Stage 5: Status Retirement & Cleanliness Check (dma_rd_desc_monitor -> status_ap)
-    // =========================================================================
     virtual function void write_dma_rd_status(dma_desc_item_type t);
         mm2s_txn_type desc;
         mm2s_status_count++;
@@ -290,9 +266,7 @@ class dma_scoreboard #(
         end
     endfunction : write_dma_rd_status
 
-    // =========================================================================
     // Retires an MM2S descriptor once BOTH status and stream packet have completed
-    // =========================================================================
     virtual function void check_and_retire_mm2s(mm2s_txn_type desc);
         int found_idx = -1;
 
@@ -348,9 +322,7 @@ class dma_scoreboard #(
                   desc.tag, desc.bytes_matched), UVM_LOW)
     endfunction : check_and_retire_mm2s
 
-    // =========================================================================
     // End-of-Test Cleanliness Check
-    // =========================================================================
     virtual function void check_phase(uvm_phase phase);
         super.check_phase(phase);
 
@@ -372,7 +344,7 @@ class dma_scoreboard #(
                      (mm2s_hang_count > 0)      || (mm2s_queue.size() > 0)      ||
                      (mm2s_by_tag.num() > 0);
 
-        `uvm_info("SCB_MM2S", "------------------ MM2S SCOREBOARD SUMMARY ------------------", UVM_NONE)
+        `uvm_info("SCB_MM2S", "MM2S SCOREBOARD SUMMARY", UVM_NONE)
         `uvm_info("SCB_MM2S", $sformatf("Commands: %0d | Status Done: %0d | Hung: %0d",
                   mm2s_cmd_count, mm2s_status_count, mm2s_hang_count), UVM_NONE)
         `uvm_info("SCB_MM2S", $sformatf("Bytes Checked: %0d | Matches: %0d | Mismatches: %0d",
@@ -387,7 +359,6 @@ class dma_scoreboard #(
         end else begin
             `uvm_warning("SCB_MM2S", "VERDICT: [NO TRANSFERS] No MM2S commands observed.")
         end
-        `uvm_info("SCB_MM2S", "-------------------------------------------------------------", UVM_NONE)
     endfunction : report_phase
 
 endclass : dma_scoreboard

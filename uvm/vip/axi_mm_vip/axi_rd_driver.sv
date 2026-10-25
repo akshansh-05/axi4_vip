@@ -117,6 +117,7 @@ class axi_rd_driver #(
         req.data  = new[req.len + 1];
         req.rresp = new[req.len + 1];
         req.rid   = new[req.len + 1];
+        req.rlast = new[req.len + 1];
 
         vif.rd_drv_cb.rready <= 1'b1;
         for (int i = 0; i <= req.len; i++) begin
@@ -127,12 +128,15 @@ class axi_rd_driver #(
             req.data[i]  = vif.rd_drv_cb.rdata;
             req.rresp[i] = vif.rd_drv_cb.rresp;
             req.rid[i]   = vif.rd_drv_cb.rid;
+            req.rlast[i] = vif.rd_drv_cb.rlast;
 
             `uvm_info("RD_DRV_DATA", $sformatf("DUT Read Beat [%0d/%0d]: rdata=0x%08h, rresp=2'b%0b, rid=0x%0h",
-                      i, req.len, req.data[i], req.rresp[i], req.rid[i]), UVM_LOW)
+                      i, req.len, req.data[i], req.rresp[i], req.rid[i]), UVM_HIGH)
         end
 
         vif.rd_drv_cb.rready <= 1'b0;
+
+        `uvm_info("RD_DRV", $sformatf("Completed Read Transaction received from DUT:\n%s", req.sprint()), UVM_LOW)
     endtask : drive_master_read
 
     virtual task run_slave();
