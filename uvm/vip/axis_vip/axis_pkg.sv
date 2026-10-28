@@ -23,6 +23,7 @@ package axis_pkg;
     `include "sequences/axis_base_seq.sv"
     `include "sequences/axis_packet_seq.sv"
     `include "sequences/axis_slave_rx_seq.sv"
+    `include "sequences/axis_rd_backpressure_seq.sv"
 
 endpackage : axis_pkg
 

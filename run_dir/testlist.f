@@ -7,6 +7,12 @@
 # 1. DMA Standalone Tests (DMA_STANDALONE) - Primary Target
 dma_sanity_test
 dma_base_test
+dma_rd_nominal_test
+dma_rd_multiburst_test
+dma_rd_4kb_split_test
+dma_rd_unaligned_test
+dma_rd_partial_len_test
+dma_rd_backpressure_test
 
 # 2. SRAM Standalone Tests (RAM_STANDALONE)
 sram_base_test

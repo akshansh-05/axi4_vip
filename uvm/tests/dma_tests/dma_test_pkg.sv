@@ -18,6 +18,12 @@ package dma_test_pkg;
 
     `include "dma_base_test.sv"
     `include "dma_sanity_test.sv"
+    `include "dma_rd_nominal_test.sv"
+    `include "dma_rd_multiburst_test.sv"
+    `include "dma_rd_4kb_split_test.sv"
+    `include "dma_rd_unaligned_test.sv"
+    `include "dma_rd_partial_len_test.sv"
+    `include "dma_rd_backpressure_test.sv"
 
 endpackage : dma_test_pkg
 

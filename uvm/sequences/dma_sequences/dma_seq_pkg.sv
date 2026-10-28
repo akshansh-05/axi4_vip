@@ -13,6 +13,12 @@ package dma_seq_pkg;
     import dma_desc_pkg::*;
 
     `include "dma_desc_sanity_seq.sv"
+    `include "dma_rd_desc_nominal_seq.sv"
+    `include "dma_rd_desc_multiburst_seq.sv"
+    `include "dma_rd_desc_4kb_split_seq.sv"
+    `include "dma_rd_desc_unaligned_seq.sv"
+    `include "dma_rd_desc_partial_len_seq.sv"
+    `include "dma_rd_desc_backpressure_seq.sv"
 
 endpackage : dma_seq_pkg
 

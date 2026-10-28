@@ -20,6 +20,17 @@ class axi_agent_config #(
     // Instantiate the Virtual interface handle
     virtual axi_if #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH) vif;
 
+    // Memory Slave Timing Knobs (Active only in slave responder mode)
+    // Stage 2: AR Channel Backpressure Knobs
+    bit          enable_arready_stall = 1'b0;
+    int unsigned min_arready_delay    = 2;
+    int unsigned max_arready_delay    = 5;
+
+    // Stage 3: R Channel Latency and Bubble Knobs
+    int unsigned initial_rdata_delay  = 0;
+    bit          enable_r_bubbles     = 1'b0;
+    int unsigned min_r_bubble         = 1;
+    int unsigned max_r_bubble         = 3;
 
 `uvm_object_param_utils(axi_agent_config #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
 

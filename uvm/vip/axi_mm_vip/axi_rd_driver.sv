@@ -140,37 +140,69 @@ class axi_rd_driver #(
     endtask : drive_master_read
 
     virtual task run_slave();
-        `uvm_info("RD_DRV", "AXI Slave Read mode running (READY tied high).", UVM_LOW)
+        `uvm_info("RD_DRV", "AXI Slave Read mode running.", UVM_LOW)
         fork
             slave_handle_ar();
             slave_handle_r();
         join
     endtask : run_slave
 
-    // Slave AR Channel: ARREADY tied HIGH, captures address descriptor on arvalid
+    // Slave AR Channel: Controls ARREADY and models address backpressure
     virtual task slave_handle_ar();
         slv_ar_info_t ar_info;
-        vif.rd_slv_drv_cb.arready <= 1'b1;
-        forever begin
-            @(vif.rd_slv_drv_cb);
-            if (vif.rd_slv_drv_cb.arvalid) begin
-                ar_info.id    = vif.rd_slv_drv_cb.arid;
-                ar_info.addr  = vif.rd_slv_drv_cb.araddr;
-                ar_info.len   = vif.rd_slv_drv_cb.arlen;
-                ar_info.size  = vif.rd_slv_drv_cb.arsize;
-                ar_info.burst = vif.rd_slv_drv_cb.arburst;
-                slv_ar_q.push_back(ar_info);
+        int unsigned  stall_cycles;
 
-                `uvm_info("RD_SLV_AR", $sformatf("Slave accepted AR: id=0x%0h, addr=0x%04h, len=%0d beats",
-                          ar_info.id, ar_info.addr, ar_info.len + 1), UVM_LOW)
+        if (!cfg.enable_arready_stall) begin
+            vif.rd_slv_drv_cb.arready <= 1'b1;
+            forever begin
+                @(vif.rd_slv_drv_cb);
+                if (vif.rd_slv_drv_cb.arvalid) begin
+                    ar_info.id    = vif.rd_slv_drv_cb.arid;
+                    ar_info.addr  = vif.rd_slv_drv_cb.araddr;
+                    ar_info.len   = vif.rd_slv_drv_cb.arlen;
+                    ar_info.size  = vif.rd_slv_drv_cb.arsize;
+                    ar_info.burst = vif.rd_slv_drv_cb.arburst;
+                    slv_ar_q.push_back(ar_info);
+
+                    `uvm_info("RD_SLV_AR", $sformatf("Slave accepted AR: id=0x%0h, addr=0x%04h, len=%0d beats",
+                              ar_info.id, ar_info.addr, ar_info.len + 1), UVM_LOW)
+                end
+            end
+        end else begin
+            vif.rd_slv_drv_cb.arready <= 1'b0;
+            forever begin
+                @(vif.rd_slv_drv_cb);
+                if (vif.rd_slv_drv_cb.arvalid) begin
+                    stall_cycles = $urandom_range(cfg.min_arready_delay, cfg.max_arready_delay);
+                    if (stall_cycles > 0) begin
+                        vif.rd_slv_drv_cb.arready <= 1'b0;
+                        repeat (stall_cycles) @(vif.rd_slv_drv_cb);
+                    end
+
+                    // Assert ARREADY for 1 clock cycle to complete address handshake
+                    vif.rd_slv_drv_cb.arready <= 1'b1;
+                    @(vif.rd_slv_drv_cb);
+                    ar_info.id    = vif.rd_slv_drv_cb.arid;
+                    ar_info.addr  = vif.rd_slv_drv_cb.araddr;
+                    ar_info.len   = vif.rd_slv_drv_cb.arlen;
+                    ar_info.size  = vif.rd_slv_drv_cb.arsize;
+                    ar_info.burst = vif.rd_slv_drv_cb.arburst;
+                    slv_ar_q.push_back(ar_info);
+
+                    `uvm_info("RD_SLV_AR", $sformatf("Slave accepted AR after %0d stall cycles: id=0x%0h, addr=0x%04h, len=%0d beats",
+                              stall_cycles, ar_info.id, ar_info.addr, ar_info.len + 1), UVM_LOW)
+
+                    vif.rd_slv_drv_cb.arready <= 1'b0;
+                end
             end
         end
     endtask : slave_handle_ar
 
-    // Slave R Channel: drives read data beats with OKAY status until rlast
+    // Slave R Channel: Drives read data beats, modeling initial latency and inter-beat bubbles
     virtual task slave_handle_r();
         slv_ar_info_t ar_info;
         bit [DATA_WIDTH-1:0] beat_data;
+        int unsigned bubble_cycles;
 
         forever begin
             while (slv_ar_q.size() == 0) begin
@@ -178,7 +210,22 @@ class axi_rd_driver #(
             end
             ar_info = slv_ar_q.pop_front();
 
+            // Initial memory read access latency before first beat
+            if (cfg.initial_rdata_delay > 0) begin
+                repeat (cfg.initial_rdata_delay) @(vif.rd_slv_drv_cb);
+            end
+
             for (int i = 0; i <= ar_info.len; i++) begin
+                // Inter-beat bubbles between consecutive beats
+                if (cfg.enable_r_bubbles && (i > 0)) begin
+                    bubble_cycles = $urandom_range(cfg.min_r_bubble, cfg.max_r_bubble);
+                    if (bubble_cycles > 0) begin
+                        vif.rd_slv_drv_cb.rvalid <= 1'b0;
+                        vif.rd_slv_drv_cb.rlast  <= 1'b0;
+                        repeat (bubble_cycles) @(vif.rd_slv_drv_cb);
+                    end
+                end
+
                 // Generate deterministic pattern: base address + beat offset
                 beat_data = 32'hA000_0000 | ((ar_info.addr + (i * 4)) & 16'hFFFF);
 
