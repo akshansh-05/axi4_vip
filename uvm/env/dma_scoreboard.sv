@@ -259,8 +259,16 @@ class dma_scoreboard #(
             mm2s_status_mismatches++;
         end
 
+        // Temporal Completion Assertion:
+        // Status pulse MUST NOT arrive before the egress stream packet has fully retired!
+        if (!desc.stream_done) begin
+            `uvm_error("SCB_MM2S_EARLY_STATUS", $sformatf("MM2S Descriptor Tag 0x%02h completion status pulsed prematurely at time %0t! Egress stream packet is still draining through FIFO (stream_done=0).",
+                       t.status_tag, $time))
+            mm2s_status_mismatches++;
+        end
+
         // If egress stream packet has already completed, retire descriptor now.
-        // If stream packet is still draining through output FIFO, write_axis_rd will retire it.
+        // If stream packet was still draining, write_axis_rd will retire it once TLAST handshakes.
         if (desc.stream_done) begin
             check_and_retire_mm2s(desc);
         end

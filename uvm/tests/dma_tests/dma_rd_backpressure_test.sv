@@ -69,7 +69,6 @@ class dma_rd_backpressure_test extends dma_base_test;
         join
         #300;
 
-        /*
         // Phase 2: Stage 4 & 5 Skid FIFO Half-Full Watermark & Upstream RREADY Clamping
         `uvm_info(get_type_name(), "Sub-iteration 2: Sustained 20-cycle TREADY freeze midway -> RREADY clamping (Tag 0x0C)", UVM_LOW)
         cfg_rd.enable_arready_stall = 1'b0;
@@ -120,10 +119,9 @@ class dma_rd_backpressure_test extends dma_base_test;
             desc_seq4.start(env.dma_rd_desc_agent.seqr);
         join
         #500;
-        */
 
         #500;
-        phase.drop_objection(this, "Completed MM2S_06 Pipeline Backpressure Test (Phase 1)");
+        phase.drop_objection(this, "Completed MM2S_06 Pipeline Backpressure Test (All 3 Phases)");
     endtask : run_phase
 
 endclass : dma_rd_backpressure_test
