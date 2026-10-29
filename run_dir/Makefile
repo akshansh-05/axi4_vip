@@ -147,7 +147,7 @@ merge_cov:
 	@echo " [IMC] Merging Coverage Databases Across All MM2S Tests into $(MERGED_DIR)"
 	@echo "==============================================================================="
 	@mkdir -p cov_html_report
-	$(IMC_CMD) -batch -execcmd "\
+	$(IMC_CMD) -execcmd "\
 		merge -out $(MERGED_DIR) $(foreach t,$(MM2S_TESTS),cov_work/scope/$(t)); \
 		report -summary -out cov_merged_summary.txt -metrics all; \
 		report -detail -out cov_merged_detail.txt -metrics all -all; \
