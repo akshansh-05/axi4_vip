@@ -59,8 +59,8 @@ help:
 	@echo " 2. TEST EXECUTION (Coverage is ALWAYS collected into ./cov_work):"
 	@echo "    make run_dma [TEST=<name>]     : Run DMA Standalone test (default: dma_sanity_test)"
 	@echo "    make gui_dma [TEST=<name>]     : Run DMA Standalone test with SimVision GUI"
-	@echo "    make run_all_mm2s              : Run all 7 MM2S feature tests sequentially"
-	@echo "    make regr_mm2s                 : Run all 7 MM2S tests + auto-merge coverage + reports"
+	@echo "    make run_all_mm2s              : Run all 6 MM2S feature tests sequentially"
+	@echo "    make regr_mm2s                 : Run all 6 MM2S tests + auto-merge coverage + reports"
 	@echo "    make run_sys [TEST=<name>]     : Run Subsystem test (default: dma_sanity_test)"
 	@echo "    make run_ram [TEST=<name>]     : Run RAM test (default: axi_sanity_test)"
 	@echo "    make waves_ram                 : Open generated waves.shm in Cadence SimVision"
@@ -117,9 +117,8 @@ run_sys: setup
 	@echo "[XCELIUM] Running Subsystem Test with Full Coverage: $(SYS_TARGET_TEST)"
 	$(XRUN_BASE) +define+SUBSYSTEM +UVM_TESTNAME=$(SYS_TARGET_TEST) -covtest $(SYS_TARGET_TEST) -l $(LOG_DIR)/sim_sys_$(SYS_TARGET_TEST).log
 
-# MM2S Feature Regression Suite
-MM2S_TESTS := dma_sanity_test \
-              dma_rd_nominal_test \
+# MM2S Feature Regression Suite (The 6 Dedicated Feature Tests)
+MM2S_TESTS := dma_rd_nominal_test \
               dma_rd_multiburst_test \
               dma_rd_4kb_split_test \
               dma_rd_unaligned_test \
