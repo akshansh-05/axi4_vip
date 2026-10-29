@@ -21,7 +21,7 @@ XRUN_BASE  := xrun -64bit -sv -uvm \
               -timescale 1ns/1ns \
               -access +rwc \
               -svseed $(SEED) \
-              +UVM_TESTNAME=$(TEST) \
+              -top tb_top \
               +UVM_VERBOSITY=$(VERB) \
               -coverage all \
               -covoverwrite \
@@ -38,7 +38,7 @@ endif
 # -------------------------------------------------------------------------------
 .PHONY: help setup clean \
         test_ram test_dma test_sys test_all \
-        run_dma gui_dma \
+        run_dma gui_dma run_all_mm2s merge_cov gui_cov regr_mm2s \
         run_ram gui_ram waves_ram \
         run_sys gui_sys \
         report_cov imc_gui
@@ -59,11 +59,15 @@ help:
 	@echo " 2. TEST EXECUTION (Coverage is ALWAYS collected into ./cov_work):"
 	@echo "    make run_dma [TEST=<name>]     : Run DMA Standalone test (default: dma_sanity_test)"
 	@echo "    make gui_dma [TEST=<name>]     : Run DMA Standalone test with SimVision GUI"
+	@echo "    make run_all_mm2s              : Run all 7 MM2S feature tests sequentially"
+	@echo "    make regr_mm2s                 : Run all 7 MM2S tests + auto-merge coverage + reports"
 	@echo "    make run_sys [TEST=<name>]     : Run Subsystem test (default: dma_sanity_test)"
 	@echo "    make run_ram [TEST=<name>]     : Run RAM test (default: axi_sanity_test)"
 	@echo "    make waves_ram                 : Open generated waves.shm in Cadence SimVision"
 	@echo ""
 	@echo " 3. COVERAGE REPORTING (Cadence IMC):"
+	@echo "    make merge_cov                 : Merge all MM2S test coverage databases into single DB"
+	@echo "    make gui_cov                   : Open Cadence IMC GUI with merged MM2S coverage (FC & CC)"
 	@echo "    make report_cov [TEST=<name>]  : Generate Text & HTML Coverage Reports"
 	@echo "    make imc_gui [TEST=<name>]     : Launch Cadence IMC GUI to inspect coverage database"
 	@echo ""
@@ -101,17 +105,68 @@ test_all: test_ram test_dma test_sys
 # -------------------------------------------------------------------------------
 run_ram: setup
 	@echo "[XCELIUM] Running RAM Test with Full Coverage: $(TEST)"
-	$(XRUN_BASE) +define+RAM_STANDALONE +UVM_TESTNAME=$(TEST) -covtest $(TEST) -l $(LOG_DIR)/sim_ram_$(TEST).log
+	$(XRUN_BASE) +define+RAM_STANDALONE -covdut axi_ram +UVM_TESTNAME=$(TEST) -covtest $(TEST) -l $(LOG_DIR)/sim_ram_$(TEST).log
 
 run_dma: setup
 	@$(eval DMA_TEST := $(if $(filter axi_sanity_test,$(TEST)),dma_sanity_test,$(TEST)))
 	@echo "[XCELIUM] Running DMA Standalone Test with Full Coverage: $(DMA_TEST)"
-	$(XRUN_BASE) +define+DMA_STANDALONE +UVM_TESTNAME=$(DMA_TEST) -covtest $(DMA_TEST) -l $(LOG_DIR)/sim_dma_$(DMA_TEST).log
+	$(XRUN_BASE) +define+DMA_STANDALONE -covdut axi_dma +UVM_TESTNAME=$(DMA_TEST) -covtest $(DMA_TEST) -l $(LOG_DIR)/sim_dma_$(DMA_TEST).log
 
 run_sys: setup
 	@$(eval SYS_TARGET_TEST := $(if $(filter axi_sanity_test,$(TEST)),dma_sanity_test,$(TEST)))
 	@echo "[XCELIUM] Running Subsystem Test with Full Coverage: $(SYS_TARGET_TEST)"
 	$(XRUN_BASE) +define+SUBSYSTEM +UVM_TESTNAME=$(SYS_TARGET_TEST) -covtest $(SYS_TARGET_TEST) -l $(LOG_DIR)/sim_sys_$(SYS_TARGET_TEST).log
+
+# MM2S Feature Regression Suite
+MM2S_TESTS := dma_sanity_test \
+              dma_rd_nominal_test \
+              dma_rd_multiburst_test \
+              dma_rd_4kb_split_test \
+              dma_rd_unaligned_test \
+              dma_rd_partial_len_test \
+              dma_rd_backpressure_test
+MERGED_DIR := merged_mm2s
+
+# Target 1: Execute all MM2S feature tests sequentially with full coverage
+run_all_mm2s: setup
+	@echo "==============================================================================="
+	@echo " [REGRESSION] Executing All MM2S Test Cases Sequentially with Full Coverage"
+	@echo "==============================================================================="
+	@for t in $(MM2S_TESTS); do \
+		echo ""; \
+		echo ">>> [RUNNING TEST]: $$t ..."; \
+		$(MAKE) run_dma TEST=$$t GUI=0 || exit 1; \
+	done
+	@echo ""
+	@echo "==============================================================================="
+	@echo ">>> [REGRESSION PASSED] All $(words $(MM2S_TESTS)) MM2S tests passed successfully!"
+	@echo "==============================================================================="
+
+# Target 2: Merge coverage databases across all tests into a single DB & report
+merge_cov:
+	@echo "==============================================================================="
+	@echo " [IMC] Merging Coverage Databases Across All MM2S Tests into $(MERGED_DIR)"
+	@echo "==============================================================================="
+	@mkdir -p cov_html_report
+	$(IMC_CMD) -batch -execcmd "\
+		merge -out $(MERGED_DIR) $(foreach t,$(MM2S_TESTS),cov_work/scope/$(t)); \
+		report -summary -out cov_merged_summary.txt -metrics all; \
+		report -detail -out cov_merged_detail.txt -metrics all -all; \
+		report -html -out cov_html_report -detail -metrics all"
+	@echo "==============================================================================="
+	@echo ">>> 1. Merged Coverage Database : cov_work/scope/$(MERGED_DIR)"
+	@echo ">>> 2. Summary Text Report      : cov_merged_summary.txt"
+	@echo ">>> 3. Detailed Text Report     : cov_merged_detail.txt"
+	@echo ">>> 4. Interactive HTML Report  : cov_html_report/index.html"
+	@echo "==============================================================================="
+
+# Target 3: Launch Cadence IMC GUI to inspect the merged coverage database (FC & CC)
+gui_cov:
+	@echo "[IMC] Launching Cadence IMC GUI with Merged Database: $(MERGED_DIR)..."
+	$(IMC_CMD) -load cov_work/scope/$(MERGED_DIR) &
+
+# Combined one-step regression and coverage generation
+regr_mm2s: run_all_mm2s merge_cov
 
 gui_dma:
 	$(MAKE) run_dma TEST=$(TEST) GUI=1
@@ -159,5 +214,5 @@ imc_gui:
 # -------------------------------------------------------------------------------
 clean:
 	@echo "[CLEAN] Removing simulation temporary files, logs, and databases..."
-	rm -rf xcelium.d xrun.* waves.shm *.vcd *.log *.key .simvision INCA_libs .bpad $(LOG_DIR) cov_work/ cov_html_report/ imc.log imc.key
+	rm -rf xcelium.d xrun.* waves.shm *.vcd *.log *.key .simvision INCA_libs .bpad $(LOG_DIR) cov_work/ cov_html_report/ imc.log imc.key cov_merged_summary.txt cov_merged_detail.txt cov_report.txt cov_detailed_report.txt
 
