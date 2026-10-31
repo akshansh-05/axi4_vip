@@ -149,6 +149,7 @@ merge_cov:
 	@mkdir -p cov_html_report
 	$(IMC_CMD) -execcmd "\
 		merge -out $(MERGED_DIR) $(foreach t,$(MM2S_TESTS),cov_work/scope/$(t)); \
+		load cov_work/scope/$(MERGED_DIR); \
 		report -summary -out cov_merged_summary.txt -metrics all; \
 		report -detail -out cov_merged_detail.txt -metrics all -all; \
 		report -html -out cov_html_report -detail -metrics all"

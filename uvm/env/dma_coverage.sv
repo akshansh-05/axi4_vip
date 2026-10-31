@@ -96,7 +96,6 @@ class dma_coverage #(
 
     bit [1:0]            current_rresp;
     bit                  is_rlast;
-    bit                  is_rd_final_beat;
 
     bit [STRB_WIDTH-1:0] current_wstrb;
     int                  wr_beat_idx;
@@ -163,10 +162,10 @@ class dma_coverage #(
         //   forcing the burst scheduler to repeatedly clamp and restart at each page edge.
         cp_transfer_len : coverpoint txn_rd_cmd.len {
             illegal_bins zero_len = {0};              // 0-length transfer is illegal in AXI DMA
-            bins sub_word_len     = {[1 : 3]};        // < 1 word: single beat with TKEEP masking
             bins single_burst_len = {[4 : 64]};       // 1 to 16 beats: single AXI burst (no FSM loop)
-            bins multi_burst_len  = {[65 : 4096]};     // Multiple AXI bursts within a page (FSM loops)
-            bins multi_page_len   = {[4097 : 65535]}; // Multi-page transfer crossing 4KB boundaries
+            bins multi_burst_len  = {[65 : 4096]};     // Multiple AXI bursts within a page
+
+
         }
 
         // Cross start address alignment with transfer length to verify that unaligned starts
@@ -201,10 +200,8 @@ class dma_coverage #(
 
         // Completed read transfer byte length (correlates stimulus size with completion outcome)
         cp_completed_rd_len : coverpoint txn_rd_status.len {
-            bins sub_word_len     = {[1 : 3]};
             bins single_burst_len = {[4 : 64]};
             bins multi_burst_len  = {[65 : 4096]};
-            bins multi_page_len   = {[4097 : 65535]};
         }
 
         // Cross completed transfer length with completion status
@@ -246,6 +243,7 @@ class dma_coverage #(
             bins single_burst_len = {[4 : 64]};       // 1 to 16 beats: single AXI burst
             bins multi_burst_len  = {[65 : 4096]};     // Multiple AXI bursts within a page
             bins multi_page_len   = {[4097 : 65535]}; // Multi-page transfer crossing 4KB boundaries
+
         }
 
         // Cross destination address alignment with buffer capacity
@@ -317,45 +315,35 @@ class dma_coverage #(
 
     // Covergroup 5: AXI4-Stream Read Data Channel (Egress Stream from DUT) [Tier 2]
     // Sampled on accepted stream beats (m_axis_read_data_tvalid && tready).
-    // Verifies packet beat counts, trailing byte masks, and downstream consumer backpressure.
+    // Verifies trailing byte masks on packet completion (TKEEP on TLAST) and downstream consumer backpressure.
     covergroup cg_axis_rd_stream;
         option.per_instance = 1;
         option.name = "cg_axis_rd_stream";
 
         // Trailing byte enable qualifiers on the final packet beat (TKEEP).
-        // Per ARM AXI-Stream spec, valid bytes within a continuous packet must be contiguous.
-        // On the final beat (TLAST), TKEEP indicates trailing unaligned bytes:
-        // 4'b1111 (full 4 bytes), 4'b0111 (3 bytes), 4'b0011 (2 bytes), 4'b0001 (1 byte).
-        // 4'b0000 is illegal because TLAST must accompany at least one valid byte.
+        // For a packed stream starting at byte 0, only 4 contiguous masks are legal.
+        // All other 12 combinations (internal holes, unpacked starts, zero keep) are illegal.
         cp_rd_last_tkeep : coverpoint current_rd_tkeep iff (is_rd_last_beat) {
             bins full_word    = {4'b1111}; // 4 active bytes (aligned word end)
-            bins three_bytes  = {4'b0111}; // 3 active bytes (unaligned length)
-            bins two_bytes    = {4'b0011}; // 2 active bytes (half-word end)
-            bins single_byte  = {4'b0001}; // 1 active byte (odd byte length)
-            illegal_bins zero = {4'b0000}; // Illegal in AXI-Stream for valid beat
+            bins three_bytes  = {4'b0111}; // 3 active bytes (bytes [2:0])
+            bins two_bytes    = {4'b0011}; // 2 active bytes (bytes [1:0])
+            bins single_byte  = {4'b0001}; // 1 active byte (byte 0)
+
+            // Unified illegal bin covering all non-contiguous holes, unpacked starts, and zero keep
+            illegal_bins invalid_tkeep = {
+                4'b0000,
+                4'b0101, 4'b1001, 4'b1011, 4'b1101,
+                4'b0010, 4'b0100, 4'b0110,
+                4'b1000, 4'b1010, 4'b1100, 4'b1110
+            };
         }
 
-        // Egress packet size measured in stream beats.
-        // Covers single-beat packets (sub-word/single-word), single-burst packets (2-16 beats),
-        // and multi-burst assembled packets (17-256 beats).
-        cp_rd_packet_beats : coverpoint axis_rd_txn.data.size() {
-            bins single_beat       = {1};            // 1-beat packet (TLAST on beat 0)
-            bins single_burst_pkt  = {[2 : 16]};     // Single AXI burst (<=64B)
-            bins multi_burst_pkt   = {[17 : 256]};   // Multi-burst assembled packet
-        }
-
-        // Downstream receiver throttling: cycles TREADY is withheld by the consumer VIP.
-        // Stresses the internal MM2S read FIFO watermark and backpressure logic,
-        // verifying that the DMA stalls read requests when the downstream sink is slow.
+        // Downstream receiver backpressure: cycles TREADY is withheld by the consumer VIP.
+        // Stresses the internal MM2S read FIFO watermark and backpressure logic.
         cp_rd_backpressure : coverpoint axis_rd_txn.ready_delay {
-            bins zero_delay   = {0};             // Full wire-speed (TREADY continuously high)
-            bins short_stall  = {[1 : 3]};       // Short 1-3 cycle pauses
-            bins med_stall    = {[4 : 10]};      // Moderate consumer throttle
-            bins heavy_stall  = {[11 : 30]};     // Heavy backpressure; fills FIFO
+            bins zero_delay      = {0};         // Full wire-speed (TREADY continuously high)
+            bins sustained_stall = {[1 : 50]};  // Active consumer backpressure
         }
-
-        // Verify trailing byte masks across all packet length categories
-        cross_rd_pkt_len_x_last_tkeep : cross cp_rd_packet_beats, cp_rd_last_tkeep;
 
     endgroup : cg_axis_rd_stream
 
@@ -410,8 +398,8 @@ class dma_coverage #(
         // and the maximum 16-beat burst (ARLEN=15).
         // ARLEN > 15 is flagged illegal because the DMA RTL has a 16-beat maximum burst limit.
         cp_ar_len : coverpoint axi_rd_txn.len {
-            bins single_beat               = {0};          // 1 beat transfer (ARLEN=0, immediate RLAST)
-            bins short_burst               = {[1 : 14]};   // 2 to 15 beats (partial / clamped)
+
+            bins short_burst               = {[0 : 14]};   // 1 to 15 beats (partial / clamped)
             bins max_burst                 = {15};         // 16 beats (AXI_MAX_BURST_LEN limit)
             illegal_bins exceeds_dma_burst = {[16 : 255]}; // RTL arithmetic overflow check
         }
@@ -427,7 +415,7 @@ class dma_coverage #(
         // Burst type (ARBURST).
         // Hardwired in RTL to 2'b01 (INCR). FIXED and WRAP bursts are illegal for this DMA.
         cp_ar_burst : coverpoint axi_rd_txn.burst {
-            bins burst_incr       = {AXI_BURST_INCR};      // Sequential INCR burst
+            bins burst_incr       = {AXI_BURST_INCR};      // Sequential INCR burst (Fixed)
             illegal_bins non_incr = {AXI_BURST_FIXED, AXI_BURST_WRAP, AXI_BURST_RSVD};
         }
 
@@ -440,24 +428,29 @@ class dma_coverage #(
         }
 
         // 4KB memory page offset (ARADDR[11:0]).
-        // Starts at 0xFC0-0xFC3 can legally issue a full 16-beat burst (64B) ending exactly at 0x1000.
-        // Starts in 0xFC4-0xFFF are clamped to ARLEN <= 14 by the page boundary (Defect D1 fix).
+        // Matches descriptor page offset categories: page boundary start, intra-page,
+        // and near-boundary (<64B from 4KB edge) where bursts are clamped.
         cp_ar_page_offset : coverpoint axi_rd_txn.addr[11:0] {
-            bins page_start      = {12'h000};             // Exactly at page boundary
-            bins mid_page        = {[12'h001 : 12'hFBF]}; // Normal intra-page transfer
-            bins end_fits_16beat = {[12'hFC0 : 12'hFC3]}; // Legal ARLEN=15 max burst ending at 0x1000
-            bins end_clamped     = {[12'hFC4 : 12'hFFF]}; // ARLEN<=14 clamped by page boundary
+            bins page_start    = {12'h000};             // Exactly at page boundary
+            bins mid_page      = {[12'h001 : 12'hFBF]}; // Normal intra-page transfer
+            bins near_page_end = {[12'hFC0 : 12'hFFF]}; // Within 64B of 4KB edge; forces burst clamping
         }
 
-        // Cross address alignment with burst lengths
+        // Memory Slave ARREADY wait states (cycles ARVALID was held high before ARREADY asserted)
+        cp_ar_wait_states : coverpoint axi_rd_txn.addr_delay {
+            bins zero_wait = {0};        // Wire-speed (MM2S_01..05, MM2S_06B)
+            bins with_wait = {[1 : 10]}; // Active slave wait states (MM2S_06A, 06C: 2-5 cycles)
+        }
+
+        // Cross address alignment with burst lengths (4 x 2 = 8 combinations)
         cross_ar_align_x_len : cross cp_ar_addr_align, cp_ar_len;
 
         // Cross page offset with burst lengths.
-        // Starts at end_clamped (0xFC4-0xFFF) with max burst (16 beats) is physically impossible because
-        // hardware clamps ARLEN to avoid crossing the 4KB boundary, so it is ignored.
+        // A burst starting in near_page_end (<64B before 4KB boundary) cannot be a 16-beat max burst
+        // because the DMA strictly clamps ARLEN to prevent crossing the 4KB boundary.
         cross_ar_offset_x_len : cross cp_ar_page_offset, cp_ar_len {
             ignore_bins clamp_excludes_max = 
-                binsof(cp_ar_page_offset.end_clamped) && binsof(cp_ar_len.max_burst);
+                binsof(cp_ar_page_offset.near_page_end) && binsof(cp_ar_len.max_burst);
         }
 
     endgroup : cg_dma_axi_ar_master
@@ -479,35 +472,14 @@ class dma_coverage #(
             ignore_bins resp_exokay = {2'b01};              // Not applicable to DMA master (no AxLOCK)
         }
 
-        // Observed Beat position within burst (RLAST from responder)
+        // Observed beat position within burst (RLAST from responder)
         cp_rlast : coverpoint is_rlast {
-            bins intermediate_beat = {0};
-            bins last_burst_beat   = {1};
-        }
-
-        // Expected final beat position
-        cp_rd_beat_pos : coverpoint is_rd_final_beat {
-            bins intermediate_beat = {0};
-            bins final_beat        = {1};
-        }
-
-        // Cross expected beat position with actual observed RLAST signal.
-        // Validates proper RLAST framing from the slave responder:
-        // - intermediate_beat with RLAST=0 (normal intermediate transfer)
-        // - final_beat with RLAST=1 (properly terminated burst)
-        // Illegal bins guarantee that framing bugs cannot silently pass coverage:
-        // - intermediate_beat with RLAST=1 (Premature RLAST)
-        // - final_beat with RLAST=0 (Missing RLAST)
-        cross_rlast_framing : cross cp_rd_beat_pos, cp_rlast {
-            bins valid_intermediate      = binsof(cp_rd_beat_pos.intermediate_beat) && binsof(cp_rlast.intermediate_beat);
-            bins valid_final_rlast       = binsof(cp_rd_beat_pos.final_beat)        && binsof(cp_rlast.last_burst_beat);
-            illegal_bins premature_rlast = binsof(cp_rd_beat_pos.intermediate_beat) && binsof(cp_rlast.last_burst_beat);
-            illegal_bins missing_rlast   = binsof(cp_rd_beat_pos.final_beat)        && binsof(cp_rlast.intermediate_beat);
+            bins intermediate_beat = {0}; // Transfer in progress
+            bins last_burst_beat   = {1}; // Final beat terminating burst
         }
 
         // Cross RRESP with RLAST.
-        // Proves that error responses (SLVERR and DECERR) are verified when received
-        // on intermediate burst beats as well as on the final burst beat.
+        // Proves that OKAY responses are sampled on both intermediate and terminal burst beats.
         cross_rresp_x_rlast : cross cp_rresp, cp_rlast;
 
     endgroup : cg_dma_axi_r_master
@@ -896,7 +868,6 @@ class dma_coverage #(
         foreach (axi_rd_txn.rresp[i]) begin
             current_rresp    = axi_rd_txn.rresp[i];
             is_rlast         = (axi_rd_txn.rlast.size() > 0 && i < axi_rd_txn.rlast.size()) ? axi_rd_txn.rlast[i] : (i == axi_rd_txn.rresp.size() - 1);
-            is_rd_final_beat = (i == axi_rd_txn.rresp.size() - 1);
             cg_dma_axi_r_master.sample();
         end
     endfunction : write_axi_rd

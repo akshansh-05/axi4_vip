@@ -51,6 +51,7 @@ class axi_rd_monitor #(
         bit [2:0]             size;
         axi_burst_type_e      burst;
         time                  timestamp;
+        int unsigned          wait_states;
     } addr_desc_t;
 
     addr_desc_t ar_q[$];
@@ -66,16 +67,23 @@ class axi_rd_monitor #(
     endtask : run_phase
 
     virtual task collect_ar_channel();
+        int unsigned wait_cycles = 0;
         forever begin
             @(vif.rd_mon_cb);
-            if (vif.rd_mon_cb.arvalid && vif.rd_mon_cb.arready) begin
+            if (vif.rst) begin
+                wait_cycles = 0;
+            end else if (vif.rd_mon_cb.arvalid && !vif.rd_mon_cb.arready) begin
+                wait_cycles++;
+            end else if (vif.rd_mon_cb.arvalid && vif.rd_mon_cb.arready) begin
                 addr_desc_t desc;
                 desc.id        = vif.rd_mon_cb.arid;
                 desc.addr      = vif.rd_mon_cb.araddr;
                 desc.len       = vif.rd_mon_cb.arlen;
                 desc.size      = vif.rd_mon_cb.arsize;
                 desc.burst     = axi_burst_type_e'(vif.rd_mon_cb.arburst);
-                desc.timestamp = $time;
+                desc.timestamp   = $time;
+                desc.wait_states = wait_cycles;
+                wait_cycles      = 0;
                 ar_q.push_back(desc);
             end
         end
@@ -102,6 +110,7 @@ class axi_rd_monitor #(
             txn.len        = desc.len;
             txn.size       = desc.size;
             txn.burst      = desc.burst;
+            txn.addr_delay = desc.wait_states;
 
             txn.data  = new[desc.len + 1];
             txn.rresp = new[desc.len + 1];
