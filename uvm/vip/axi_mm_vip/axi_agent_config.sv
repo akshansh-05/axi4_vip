@@ -32,6 +32,17 @@ class axi_agent_config #(
     int unsigned min_r_bubble         = 1;
     int unsigned max_r_bubble         = 3;
 
+    // Write Slave Backpressure Knobs (Active only in slave responder mode)
+    bit          enable_awready_stall = 1'b0;
+    int unsigned min_awready_delay    = 3;
+    int unsigned max_awready_delay    = 8;
+
+    bit          enable_wready_stall  = 1'b0;
+    int unsigned wready_stall_period  = 4; // Stall every N beats
+    int unsigned wready_stall_cycles  = 3; // Stalls for M cycles
+
+    int unsigned bvalid_delay         = 0; // Delay cycles before asserting BVALID
+
 `uvm_object_param_utils(axi_agent_config #(DATA_WIDTH, ADDR_WIDTH, ID_WIDTH, STRB_WIDTH))
 
 function new(string name = "axi_agent_config");

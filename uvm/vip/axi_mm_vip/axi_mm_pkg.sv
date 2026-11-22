@@ -1,5 +1,5 @@
 // File: axi_mm_pkg.sv
-// Package bundling all AXI4 Memory-Mapped (AXI-MM) UVC components.
+// Description: Package bundling all AXI4 Memory-Mapped (AXI-MM) UVC components and timing configurations.
 
 `ifndef AXI_MM_PKG_SV
 `define AXI_MM_PKG_SV

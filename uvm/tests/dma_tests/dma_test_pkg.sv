@@ -24,6 +24,17 @@ package dma_test_pkg;
     `include "dma_rd_unaligned_test.sv"
     `include "dma_rd_partial_len_test.sv"
     `include "dma_rd_backpressure_test.sv"
+    `include "dma_wr_nominal_test.sv"
+    `include "dma_wr_b2b_test.sv"
+    `include "dma_wr_multiburst_test.sv"
+    `include "dma_wr_4kb_split_test.sv"
+    `include "dma_wr_unaligned_test.sv"
+    `include "dma_wr_partial_len_test.sv"
+    `include "dma_wr_early_term_test.sv"
+    `include "dma_wr_excess_data_test.sv"
+    `include "dma_wr_skew_test.sv"
+    `include "dma_wr_stream_bubble_test.sv"
+    `include "dma_wr_backpressure_test.sv"
 
 endpackage : dma_test_pkg
 

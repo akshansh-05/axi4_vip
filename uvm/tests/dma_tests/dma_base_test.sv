@@ -135,9 +135,9 @@ class dma_base_test extends uvm_test;
     virtual function void end_of_elaboration_phase(uvm_phase phase);
         super.end_of_elaboration_phase(phase);
         if (is_standalone_dma) begin
-            `uvm_info(get_type_name(), "DMA Standalone Verification Environment Topology (AXI-MM VIP: ACTIVE SLAVE)", UVM_NONE)
+            `uvm_info(get_type_name(), "DMA Standalone Verification Environment Topology (AXI-MM VIP: ACTIVE SLAVE)", UVM_LOW)
         end else begin
-            `uvm_info(get_type_name(), "DMA Subsystem Verification Environment Topology (AXI-MM VIP: PASSIVE MONITOR)", UVM_NONE)
+            `uvm_info(get_type_name(), "DMA Subsystem Verification Environment Topology (AXI-MM VIP: PASSIVE MONITOR)", UVM_LOW)
         end
         uvm_top.print_topology();
     endfunction : end_of_elaboration_phase

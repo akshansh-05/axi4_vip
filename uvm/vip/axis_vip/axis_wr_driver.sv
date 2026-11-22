@@ -61,18 +61,18 @@ class axis_wr_driver #(
 
     // Drive each beat of an AXI-Stream packet sequentially
     virtual task drive_packet(req_type item);
-        int num_beats;
+        int  num_beats;
+        time beat_drive_time;
         num_beats = item.data.size();
 
         for (int i = 0; i < num_beats; i++) begin
-            // Optional inter-beat delay (idle cycles where TVALID remains deasserted)
+            // Optional inter-packet delay (at i == 0) or inter-beat delay (at i > 0):
+            // Insert idle bubble cycles where TVALID remains deasserted
             if (item.delay.size() > i && item.delay[i] > 0) begin
                 vif.mst_drv_cb.tvalid <= 1'b0;
                 vif.mst_drv_cb.tdata  <= '0;
                 vif.mst_drv_cb.tkeep  <= '0;
                 repeat (item.delay[i]) @(vif.mst_drv_cb);
-            end else if (i == 0) begin
-                @(vif.mst_drv_cb);
             end
 
             // Drive beat payload and attributes
@@ -84,9 +84,12 @@ class axis_wr_driver #(
             vif.mst_drv_cb.tuser  <= (item.user.size() > i) ? item.user[i] : '0;
             vif.mst_drv_cb.tvalid <= 1'b1;
 
-            // Wait for handshake: TVALID and TREADY sampled high at clock edge
+            beat_drive_time = $time;
+
+            // Wait for handshake: TVALID and TREADY sampled high at clock edge.
+            // Handshake requires at least 1 clock edge after assertion ($time > beat_drive_time).
             @(vif.mst_drv_cb);
-            while (!vif.mst_drv_cb.tready) begin
+            while (!vif.mst_drv_cb.tready || $time == beat_drive_time) begin
                 @(vif.mst_drv_cb);
             end
         end

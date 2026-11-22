@@ -53,6 +53,7 @@ class axi_wr_monitor #(
         bit [2:0]             size;
         axi_burst_type_e      burst;
         time                  timestamp;
+        int                   wait_states;
     } addr_desc_t;
 
     typedef struct {
@@ -83,16 +84,23 @@ class axi_wr_monitor #(
     endtask : run_phase
 
     virtual task collect_aw_channel();
+        int wait_cycles = 0;
         forever begin
             @(vif.wr_mon_cb);
-            if (vif.wr_mon_cb.awvalid && vif.wr_mon_cb.awready) begin
+            if (!vif.wr_mon_cb.awvalid) begin
+                wait_cycles = 0;
+            end else if (vif.wr_mon_cb.awvalid && !vif.wr_mon_cb.awready) begin
+                wait_cycles++;
+            end else if (vif.wr_mon_cb.awvalid && vif.wr_mon_cb.awready) begin
                 addr_desc_t desc;
-                desc.id        = vif.wr_mon_cb.awid;
-                desc.addr      = vif.wr_mon_cb.awaddr;
-                desc.len       = vif.wr_mon_cb.awlen;
-                desc.size      = vif.wr_mon_cb.awsize;
-                desc.burst     = axi_burst_type_e'(vif.wr_mon_cb.awburst);
-                desc.timestamp = $time;
+                desc.id          = vif.wr_mon_cb.awid;
+                desc.addr        = vif.wr_mon_cb.awaddr;
+                desc.len         = vif.wr_mon_cb.awlen;
+                desc.size        = vif.wr_mon_cb.awsize;
+                desc.burst       = axi_burst_type_e'(vif.wr_mon_cb.awburst);
+                desc.timestamp   = $time;
+                desc.wait_states = wait_cycles;
+                wait_cycles      = 0;
                 aw_q.push_back(desc);
             end
         end
@@ -144,6 +152,7 @@ class axi_wr_monitor #(
             txn.len        = desc.len;
             txn.size       = desc.size;
             txn.burst      = desc.burst;
+            txn.addr_delay = desc.wait_states;
 
             txn.data  = new[desc.len + 1];
             txn.strb  = new[desc.len + 1];

@@ -67,13 +67,15 @@ class dma_rd_desc_driver #(
     endtask : reset_signals
 
     virtual task drive_descriptor(req_type req);
-        // Optional delay before asserting valid
-        repeat (req.valid_delay) @(vif.rd_desc_drv_cb);
+        time drive_time;
 
-        // Synchronize to clock edge before driving signals
-        @(vif.rd_desc_drv_cb);
+        // Optional inter-descriptor delay (idle cycles where read_desc_valid remains deasserted)
+        if (req.valid_delay > 0) begin
+            reset_signals();
+            repeat (req.valid_delay) @(vif.rd_desc_drv_cb);
+        end
 
-        // Drive descriptor signals
+        // Drive descriptor signals immediately when valid_delay == 0
         vif.rd_desc_drv_cb.read_desc_addr  <= req.addr;
         vif.rd_desc_drv_cb.read_desc_len   <= req.len;
         vif.rd_desc_drv_cb.read_desc_tag   <= req.tag;
@@ -82,9 +84,13 @@ class dma_rd_desc_driver #(
         vif.rd_desc_drv_cb.read_desc_user  <= req.user;
         vif.rd_desc_drv_cb.read_desc_valid <= 1'b1;
 
-        // Wait for handshake: sample at clock edge and verify ready
+        drive_time = $time;
+
+        // Wait for handshake: sample at clock edge and verify ready.
+        // A valid synchronous handshake requires at least 1 clock edge after assertion ($time > drive_time)
+        // to prevent zero-time race conditions when a sequence unblocks on an active clock edge.
         @(vif.rd_desc_drv_cb);
-        while (!vif.rd_desc_drv_cb.read_desc_ready) begin
+        while (!vif.rd_desc_drv_cb.read_desc_ready || $time == drive_time) begin
             @(vif.rd_desc_drv_cb);
         end
 

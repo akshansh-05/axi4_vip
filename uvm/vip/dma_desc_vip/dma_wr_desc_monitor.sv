@@ -109,10 +109,10 @@ class dma_wr_desc_monitor #(
 
         item.status_tag   = s_tag;
         item.status_len   = vif.wr_desc_mon_cb.write_desc_status_len;
+        item.status_error = dma_error_e'(vif.wr_desc_mon_cb.write_desc_status_error);
         item.status_id    = vif.wr_desc_mon_cb.write_desc_status_id;
         item.status_dest  = vif.wr_desc_mon_cb.write_desc_status_dest;
         item.status_user  = vif.wr_desc_mon_cb.write_desc_status_user;
-        item.status_error = dma_error_e'(vif.wr_desc_mon_cb.write_desc_status_error);
 
         `uvm_info("WR_DESC_MON", $sformatf("Sampled Write Descriptor Status:\n%s", item.sprint()), UVM_LOW)
         status_ap.write(item);

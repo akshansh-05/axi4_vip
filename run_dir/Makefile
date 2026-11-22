@@ -38,7 +38,10 @@ endif
 # -------------------------------------------------------------------------------
 .PHONY: help setup clean \
         test_ram test_dma test_sys test_all \
-        run_dma gui_dma run_all_mm2s merge_cov gui_cov regr_mm2s \
+        run_dma gui_dma \
+        run_all_mm2s merge_cov_mm2s gui_cov_mm2s regr_mm2s \
+        run_all_s2mm merge_cov_s2mm gui_cov_s2mm regr_s2mm \
+        run_all_dma merge_cov gui_cov regr_all_dma \
         run_ram gui_ram waves_ram \
         run_sys gui_sys \
         report_cov imc_gui
@@ -57,18 +60,26 @@ help:
 	@echo "    make test_all                  : Test all 3 topologies sequentially"
 	@echo ""
 	@echo " 2. TEST EXECUTION (Coverage is ALWAYS collected into ./cov_work):"
-	@echo "    make run_dma [TEST=<name>]     : Run DMA Standalone test (default: dma_sanity_test)"
-	@echo "    make gui_dma [TEST=<name>]     : Run DMA Standalone test with SimVision GUI"
-	@echo "    make run_all_mm2s              : Run all 6 MM2S feature tests sequentially"
-	@echo "    make regr_mm2s                 : Run all 6 MM2S tests + auto-merge coverage + reports"
+	@echo "    make run_dma [TEST=<name>]     : Run single DMA test (default: dma_sanity_test)"
+	@echo "    make gui_dma [TEST=<name>]     : Run single DMA test with SimVision GUI"
+	@echo "    make run_all_mm2s              : Run all 6 MM2S tests + terminal summary"
+	@echo "    make run_all_s2mm              : Run all 11 S2MM tests + terminal summary"
+	@echo "    make run_all_dma               : Run all 17 DMA feature tests (MM2S+S2MM) + summary"
 	@echo "    make run_sys [TEST=<name>]     : Run Subsystem test (default: dma_sanity_test)"
 	@echo "    make run_ram [TEST=<name>]     : Run RAM test (default: axi_sanity_test)"
 	@echo "    make waves_ram                 : Open generated waves.shm in Cadence SimVision"
 	@echo ""
-	@echo " 3. COVERAGE REPORTING (Cadence IMC):"
-	@echo "    make merge_cov                 : Merge all MM2S test coverage databases into single DB"
-	@echo "    make gui_cov                   : Open Cadence IMC GUI with merged MM2S coverage (FC & CC)"
-	@echo "    make report_cov [TEST=<name>]  : Generate Text & HTML Coverage Reports"
+	@echo " 3. COVERAGE REPORTING & MERGING (Cadence IMC):"
+	@echo "    make merge_cov                 : Merge ALL tests (MM2S + S2MM) into $(MERGED_ALL_DIR)"
+	@echo "    make gui_cov                   : Open Cadence IMC GUI with Unified Merged DB ($(MERGED_ALL_DIR))"
+	@echo "    make regr_all_dma              : Full Regression (run_all_dma + merge_cov)"
+	@echo "    make merge_cov_s2mm            : Merge all S2MM test coverage databases"
+	@echo "    make gui_cov_s2mm              : Open Cadence IMC GUI with S2MM Merged DB"
+	@echo "    make regr_s2mm                 : Run all S2MM tests + auto-merge coverage + reports"
+	@echo "    make merge_cov_mm2s            : Merge all MM2S test coverage databases"
+	@echo "    make gui_cov_mm2s              : Open Cadence IMC GUI with MM2S Merged DB"
+	@echo "    make regr_mm2s                 : Run all MM2S tests + auto-merge coverage + reports"
+	@echo "    make report_cov [TEST=<name>]  : Generate Text & HTML Coverage Reports for single test"
 	@echo "    make imc_gui [TEST=<name>]     : Launch Cadence IMC GUI to inspect coverage database"
 	@echo ""
 	@echo " 4. UTILITIES:"
@@ -117,16 +128,39 @@ run_sys: setup
 	@echo "[XCELIUM] Running Subsystem Test with Full Coverage: $(SYS_TARGET_TEST)"
 	$(XRUN_BASE) +define+SUBSYSTEM +UVM_TESTNAME=$(SYS_TARGET_TEST) -covtest $(SYS_TARGET_TEST) -l $(LOG_DIR)/sim_sys_$(SYS_TARGET_TEST).log
 
-# MM2S Feature Regression Suite (The 6 Dedicated Feature Tests)
+# MM2S Feature Regression Suite (6 Feature Tests)
 MM2S_TESTS := dma_rd_nominal_test \
               dma_rd_multiburst_test \
               dma_rd_4kb_split_test \
               dma_rd_unaligned_test \
               dma_rd_partial_len_test \
               dma_rd_backpressure_test
-MERGED_DIR := merged_mm2s
 
-# Target 1: Execute all MM2S feature tests sequentially with full coverage
+# S2MM Feature Regression Suite (11 Feature Tests)
+S2MM_TESTS := dma_wr_nominal_test \
+              dma_wr_b2b_test \
+              dma_wr_multiburst_test \
+              dma_wr_4kb_split_test \
+              dma_wr_unaligned_test \
+              dma_wr_partial_len_test \
+              dma_wr_early_term_test \
+              dma_wr_excess_data_test \
+              dma_wr_skew_test \
+              dma_wr_stream_bubble_test \
+              dma_wr_backpressure_test
+
+# Complete DMA Feature Regression Suite (MM2S + S2MM = 17 Feature Tests)
+ALL_DMA_TESTS := $(MM2S_TESTS) \
+                 $(S2MM_TESTS)
+
+MERGED_MM2S_DIR := merged_mm2s
+MERGED_S2MM_DIR := merged_s2mm
+MERGED_ALL_DIR  := merged_dma
+MERGED_DIR      ?= $(MERGED_ALL_DIR)
+
+# -------------------------------------------------------------------------------
+# MM2S Regression & Coverage Targets
+# -------------------------------------------------------------------------------
 run_all_mm2s: setup
 	@echo "==============================================================================="
 	@echo " [REGRESSION] Executing All MM2S Test Cases Sequentially with Full Coverage"
@@ -134,40 +168,185 @@ run_all_mm2s: setup
 	@for t in $(MM2S_TESTS); do \
 		echo ""; \
 		echo ">>> [RUNNING TEST]: $$t ..."; \
-		$(MAKE) run_dma TEST=$$t GUI=0 || exit 1; \
+		$(MAKE) run_dma TEST=$$t GUI=0 || true; \
 	done
 	@echo ""
 	@echo "==============================================================================="
-	@echo ">>> [REGRESSION PASSED] All $(words $(MM2S_TESTS)) MM2S tests passed successfully!"
+	@echo "                 MM2S REGRESSION TEST RESULTS SUMMARY                         "
+	@echo "==============================================================================="
+	@total=0; pass=0; fail=0; \
+	for t in $(MM2S_TESTS); do \
+		total=$$((total + 1)); \
+		log_file="$(LOG_DIR)/sim_dma_$${t}.log"; \
+		if [ -f "$$log_file" ] && grep -q "UVM_ERROR : *0" "$$log_file" && grep -q "UVM_FATAL : *0" "$$log_file"; then \
+			printf "  %-32s : [PASSED]\n" "$$t"; \
+			pass=$$((pass + 1)); \
+		else \
+			printf "  %-32s : [FAILED] (see $$log_file)\n" "$$t"; \
+			fail=$$((fail + 1)); \
+		fi; \
+	done; \
+	echo "==============================================================================="; \
+	echo " Total Tests: $$total | Passed: $$pass | Failed: $$fail"; \
+	echo "==============================================================================="; \
+	if [ $$fail -ne 0 ]; then \
+		echo ">>> [REGRESSION FAILED] $$fail MM2S test(s) failed or did not run."; \
+		exit 1; \
+	else \
+		echo ">>> [REGRESSION PASSED] All $$pass MM2S tests completed with ZERO UVM errors!"; \
+	fi
+
+merge_cov_mm2s:
+	@echo "==============================================================================="
+	@echo " [IMC] Merging Coverage Across All MM2S Tests into $(MERGED_MM2S_DIR)"
+	@echo "==============================================================================="
+	@mkdir -p cov_html_report_mm2s
+	$(IMC_CMD) -execcmd "\
+		merge -out $(MERGED_MM2S_DIR) $(foreach t,$(MM2S_TESTS),cov_work/scope/$(t)); \
+		load cov_work/scope/$(MERGED_MM2S_DIR); \
+		report -summary -out cov_mm2s_summary.txt -metrics all; \
+		report -detail -out cov_mm2s_detail.txt -metrics all -all; \
+		report -html -out cov_html_report_mm2s -detail -metrics all"
+	@echo "==============================================================================="
+	@echo ">>> 1. MM2S Merged Coverage DB  : cov_work/scope/$(MERGED_MM2S_DIR)"
+	@echo ">>> 2. Summary Text Report      : cov_mm2s_summary.txt"
+	@echo ">>> 3. Detailed Text Report     : cov_mm2s_detail.txt"
+	@echo ">>> 4. Interactive HTML Report  : cov_html_report_mm2s/index.html"
 	@echo "==============================================================================="
 
-# Target 2: Merge coverage databases across all tests into a single DB & report
+gui_cov_mm2s:
+	@echo "[IMC] Launching Cadence IMC GUI with MM2S Merged Database: $(MERGED_MM2S_DIR)..."
+	$(IMC_CMD) -load cov_work/scope/$(MERGED_MM2S_DIR) &
+
+regr_mm2s: run_all_mm2s merge_cov_mm2s
+
+# -------------------------------------------------------------------------------
+# S2MM Regression & Coverage Targets
+# -------------------------------------------------------------------------------
+run_all_s2mm: setup
+	@echo "==============================================================================="
+	@echo " [REGRESSION] Executing All S2MM Test Cases Sequentially with Full Coverage"
+	@echo "==============================================================================="
+	@for t in $(S2MM_TESTS); do \
+		echo ""; \
+		echo ">>> [RUNNING TEST]: $$t ..."; \
+		$(MAKE) run_dma TEST=$$t GUI=0 || true; \
+	done
+	@echo ""
+	@echo "==============================================================================="
+	@echo "                 S2MM REGRESSION TEST RESULTS SUMMARY                         "
+	@echo "==============================================================================="
+	@total=0; pass=0; fail=0; \
+	for t in $(S2MM_TESTS); do \
+		total=$$((total + 1)); \
+		log_file="$(LOG_DIR)/sim_dma_$${t}.log"; \
+		if [ -f "$$log_file" ] && grep -q "UVM_ERROR : *0" "$$log_file" && grep -q "UVM_FATAL : *0" "$$log_file"; then \
+			printf "  %-32s : [PASSED]\n" "$$t"; \
+			pass=$$((pass + 1)); \
+		else \
+			printf "  %-32s : [FAILED] (see $$log_file)\n" "$$t"; \
+			fail=$$((fail + 1)); \
+		fi; \
+	done; \
+	echo "==============================================================================="; \
+	echo " Total Tests: $$total | Passed: $$pass | Failed: $$fail"; \
+	echo "==============================================================================="; \
+	if [ $$fail -ne 0 ]; then \
+		echo ">>> [REGRESSION FAILED] $$fail S2MM test(s) failed or did not run."; \
+		exit 1; \
+	else \
+		echo ">>> [REGRESSION PASSED] All $$pass S2MM tests completed with ZERO UVM errors!"; \
+	fi
+
+merge_cov_s2mm:
+	@echo "==============================================================================="
+	@echo " [IMC] Merging Coverage Across All S2MM Tests into $(MERGED_S2MM_DIR)"
+	@echo "==============================================================================="
+	@mkdir -p cov_html_report_s2mm
+	$(IMC_CMD) -execcmd "\
+		merge -out $(MERGED_S2MM_DIR) $(foreach t,$(S2MM_TESTS),cov_work/scope/$(t)); \
+		load cov_work/scope/$(MERGED_S2MM_DIR); \
+		report -summary -out cov_s2mm_summary.txt -metrics all; \
+		report -detail -out cov_s2mm_detail.txt -metrics all -all; \
+		report -html -out cov_html_report_s2mm -detail -metrics all"
+	@echo "==============================================================================="
+	@echo ">>> 1. S2MM Merged Coverage DB  : cov_work/scope/$(MERGED_S2MM_DIR)"
+	@echo ">>> 2. Summary Text Report      : cov_s2mm_summary.txt"
+	@echo ">>> 3. Detailed Text Report     : cov_s2mm_detail.txt"
+	@echo ">>> 4. Interactive HTML Report  : cov_html_report_s2mm/index.html"
+	@echo "==============================================================================="
+
+gui_cov_s2mm:
+	@echo "[IMC] Launching Cadence IMC GUI with S2MM Merged Database: $(MERGED_S2MM_DIR)..."
+	$(IMC_CMD) -load cov_work/scope/$(MERGED_S2MM_DIR) &
+
+regr_s2mm: run_all_s2mm merge_cov_s2mm
+
+# -------------------------------------------------------------------------------
+# Full Unified DMA Feature Regression & Coverage Targets (MM2S + S2MM = 17 Tests)
+# -------------------------------------------------------------------------------
+run_all_dma: setup
+	@echo "==============================================================================="
+	@echo " [REGRESSION] Executing Full DMA Feature Regression (MM2S + S2MM = 17 Tests)"
+	@echo "==============================================================================="
+	@for t in $(ALL_DMA_TESTS); do \
+		echo ""; \
+		echo ">>> [RUNNING TEST]: $$t ..."; \
+		$(MAKE) run_dma TEST=$$t GUI=0 || true; \
+	done
+	@echo ""
+	@echo "==============================================================================="
+	@echo "                 DMA FULL REGRESSION TEST RESULTS SUMMARY                     "
+	@echo "==============================================================================="
+	@total=0; pass=0; fail=0; \
+	for t in $(ALL_DMA_TESTS); do \
+		total=$$((total + 1)); \
+		log_file="$(LOG_DIR)/sim_dma_$${t}.log"; \
+		if [ -f "$$log_file" ] && grep -q "UVM_ERROR : *0" "$$log_file" && grep -q "UVM_FATAL : *0" "$$log_file"; then \
+			printf "  %-32s : [PASSED]\n" "$$t"; \
+			pass=$$((pass + 1)); \
+		else \
+			printf "  %-32s : [FAILED] (see $$log_file)\n" "$$t"; \
+			fail=$$((fail + 1)); \
+		fi; \
+	done; \
+	echo "==============================================================================="; \
+	echo " Total Tests: $$total | Passed: $$pass | Failed: $$fail"; \
+	echo "==============================================================================="; \
+	if [ $$fail -ne 0 ]; then \
+		echo ">>> [REGRESSION FAILED] $$fail DMA test(s) failed or did not run."; \
+		exit 1; \
+	else \
+		echo ">>> [REGRESSION PASSED] All $$pass DMA tests completed with ZERO UVM errors!"; \
+	fi
+
 merge_cov:
 	@echo "==============================================================================="
-	@echo " [IMC] Merging Coverage Databases Across All MM2S Tests into $(MERGED_DIR)"
+	@echo " [IMC] Merging Unified Coverage Across ALL Tests (MM2S + S2MM) into $(MERGED_ALL_DIR)"
 	@echo "==============================================================================="
 	@mkdir -p cov_html_report
 	$(IMC_CMD) -execcmd "\
-		merge -out $(MERGED_DIR) $(foreach t,$(MM2S_TESTS),cov_work/scope/$(t)); \
-		load cov_work/scope/$(MERGED_DIR); \
+		merge -out $(MERGED_ALL_DIR) $(foreach t,$(ALL_DMA_TESTS),cov_work/scope/$(t)); \
+		load cov_work/scope/$(MERGED_ALL_DIR); \
 		report -summary -out cov_merged_summary.txt -metrics all; \
 		report -detail -out cov_merged_detail.txt -metrics all -all; \
 		report -html -out cov_html_report -detail -metrics all"
 	@echo "==============================================================================="
-	@echo ">>> 1. Merged Coverage Database : cov_work/scope/$(MERGED_DIR)"
-	@echo ">>> 2. Summary Text Report      : cov_merged_summary.txt"
-	@echo ">>> 3. Detailed Text Report     : cov_merged_detail.txt"
-	@echo ">>> 4. Interactive HTML Report  : cov_html_report/index.html"
+	@echo ">>> 1. Unified Merged Database : cov_work/scope/$(MERGED_ALL_DIR)"
+	@echo ">>> 2. Summary Text Report     : cov_merged_summary.txt"
+	@echo ">>> 3. Detailed Text Report    : cov_merged_detail.txt"
+	@echo ">>> 4. Interactive HTML Report : cov_html_report/index.html"
 	@echo "==============================================================================="
 
-# Target 3: Launch Cadence IMC GUI to inspect the merged coverage database (FC & CC)
 gui_cov:
-	@echo "[IMC] Launching Cadence IMC GUI with Merged Database: $(MERGED_DIR)..."
+	@echo "[IMC] Launching Cadence IMC GUI with Unified Merged Database: $(MERGED_DIR)..."
 	$(IMC_CMD) -load cov_work/scope/$(MERGED_DIR) &
 
-# Combined one-step regression and coverage generation
-regr_mm2s: run_all_mm2s merge_cov
+regr_all_dma: run_all_dma merge_cov
 
+# -------------------------------------------------------------------------------
+# Interactive GUI & Utility Targets
+# -------------------------------------------------------------------------------
 gui_dma:
 	$(MAKE) run_dma TEST=$(TEST) GUI=1
 
@@ -210,9 +389,8 @@ imc_gui:
 	$(IMC_CMD) -load cov_work/scope/$(TEST) &
 
 # -------------------------------------------------------------------------------
-# 6. Clean Target
+# Clean Target
 # -------------------------------------------------------------------------------
 clean:
 	@echo "[CLEAN] Removing simulation temporary files, logs, and databases..."
-	rm -rf xcelium.d xrun.* waves.shm *.vcd *.log *.key .simvision INCA_libs .bpad $(LOG_DIR) cov_work/ cov_html_report/ imc.log imc.key cov_merged_summary.txt cov_merged_detail.txt cov_report.txt cov_detailed_report.txt
-
+	rm -rf xcelium.d xrun.* waves.shm *.vcd *.log *.key .simvision INCA_libs .bpad $(LOG_DIR) cov_work/ cov_html_report/ cov_html_report_s2mm/ cov_html_report_mm2s/ imc.log imc.key cov_merged_summary.txt cov_merged_detail.txt cov_s2mm_summary.txt cov_s2mm_detail.txt cov_mm2s_summary.txt cov_mm2s_detail.txt cov_report.txt cov_detailed_report.txt

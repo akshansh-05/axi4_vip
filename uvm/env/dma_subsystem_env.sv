@@ -73,11 +73,11 @@ class dma_subsystem_env #(
         dma_rd_desc_agent.mon.status_ap.connect(scb.imp_dma_rd_status);
         axis_rd_agent.mon.ap.connect(scb.imp_axis_rd);
         axi_rd_agent.mon.ap.connect(scb.imp_axi_rd);
-        // S2MM Scoreboard connections (deferred until S2MM stage)
-        // dma_wr_desc_agent.mon.cmd_ap.connect(scb.imp_dma_wr_cmd);
-        // dma_wr_desc_agent.mon.status_ap.connect(scb.imp_dma_wr_status);
-        // axis_wr_agent.mon.ap.connect(scb.imp_axis_wr);
-        // axi_wr_agent.mon.ap.connect(scb.imp_axi_wr);
+        // S2MM Scoreboard connections
+        dma_wr_desc_agent.mon.cmd_ap.connect(scb.imp_dma_wr_cmd);
+        dma_wr_desc_agent.mon.status_ap.connect(scb.imp_dma_wr_status);
+        axis_wr_agent.mon.ap.connect(scb.imp_axis_wr);
+        axi_wr_agent.mon.ap.connect(scb.imp_axi_wr);
     endfunction : connect_phase
 
 endclass : dma_subsystem_env

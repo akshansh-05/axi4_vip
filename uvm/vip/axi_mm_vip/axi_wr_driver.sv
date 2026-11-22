@@ -166,43 +166,83 @@ class axi_wr_driver #(
         join
     endtask : run_slave
 
-    // Slave AW Channel: AWREADY tied HIGH, captures address descriptor on awvalid
+    // Slave AW Channel: Controls AWREADY and models address backpressure
     virtual task slave_handle_aw();
         slv_aw_info_t aw_info;
-        vif.wr_slv_drv_cb.awready <= 1'b1;
-        forever begin
-            @(vif.wr_slv_drv_cb);
-            if (vif.wr_slv_drv_cb.awvalid) begin
-                aw_info.id    = vif.wr_slv_drv_cb.awid;
-                aw_info.addr  = vif.wr_slv_drv_cb.awaddr;
-                aw_info.len   = vif.wr_slv_drv_cb.awlen;
-                aw_info.size  = vif.wr_slv_drv_cb.awsize;
-                aw_info.burst = vif.wr_slv_drv_cb.awburst;
-                slv_aw_q.push_back(aw_info);
+        int unsigned  stall_cycles;
 
-                `uvm_info("WR_SLV_AW", $sformatf("Slave accepted AW: id=0x%0h, addr=0x%04h, len=%0d beats",
-                          aw_info.id, aw_info.addr, aw_info.len + 1), UVM_HIGH)
+        if (!cfg.enable_awready_stall) begin
+            vif.wr_slv_drv_cb.awready <= 1'b1;
+            forever begin
+                @(vif.wr_slv_drv_cb);
+                if (vif.wr_slv_drv_cb.awvalid) begin
+                    aw_info.id    = vif.wr_slv_drv_cb.awid;
+                    aw_info.addr  = vif.wr_slv_drv_cb.awaddr;
+                    aw_info.len   = vif.wr_slv_drv_cb.awlen;
+                    aw_info.size  = vif.wr_slv_drv_cb.awsize;
+                    aw_info.burst = vif.wr_slv_drv_cb.awburst;
+                    slv_aw_q.push_back(aw_info);
+
+                    `uvm_info("WR_SLV_AW", $sformatf("Slave accepted AW: id=0x%0h, addr=0x%04h, len=%0d beats",
+                              aw_info.id, aw_info.addr, aw_info.len + 1), UVM_HIGH)
+                end
+            end
+        end else begin
+            vif.wr_slv_drv_cb.awready <= 1'b0;
+            forever begin
+                @(vif.wr_slv_drv_cb);
+                if (vif.wr_slv_drv_cb.awvalid) begin
+                    stall_cycles = $urandom_range(cfg.min_awready_delay, cfg.max_awready_delay);
+                    if (stall_cycles > 0) begin
+                        vif.wr_slv_drv_cb.awready <= 1'b0;
+                        repeat (stall_cycles) @(vif.wr_slv_drv_cb);
+                    end
+
+                    // Assert AWREADY for 1 clock cycle to complete address handshake
+                    vif.wr_slv_drv_cb.awready <= 1'b1;
+                    @(vif.wr_slv_drv_cb);
+                    aw_info.id    = vif.wr_slv_drv_cb.awid;
+                    aw_info.addr  = vif.wr_slv_drv_cb.awaddr;
+                    aw_info.len   = vif.wr_slv_drv_cb.awlen;
+                    aw_info.size  = vif.wr_slv_drv_cb.awsize;
+                    aw_info.burst = vif.wr_slv_drv_cb.awburst;
+                    slv_aw_q.push_back(aw_info);
+
+                    `uvm_info("WR_SLV_AW", $sformatf("Slave accepted AW after %0d stall cycles: id=0x%0h, addr=0x%04h, len=%0d beats",
+                              stall_cycles, aw_info.id, aw_info.addr, aw_info.len + 1), UVM_LOW)
+
+                    vif.wr_slv_drv_cb.awready <= 1'b0;
+                end
             end
         end
     endtask : slave_handle_aw
 
-    // Slave W Channel: WREADY tied HIGH, consumes write data beats until wlast
+    // Slave W Channel: Consumes write data beats with optional WREADY periodic stalls
     virtual task slave_handle_w();
+        int unsigned w_beat_cnt = 0;
         vif.wr_slv_drv_cb.wready <= 1'b1;
         forever begin
             @(vif.wr_slv_drv_cb);
-            if (vif.wr_slv_drv_cb.wvalid) begin
-                `uvm_info("WR_SLV_W", $sformatf("Slave accepted W beat: data=0x%08h, strb=0x%01h, last=%0b",
-                          vif.wr_slv_drv_cb.wdata, vif.wr_slv_drv_cb.wstrb, vif.wr_slv_drv_cb.wlast), UVM_FULL)
+            if (vif.wr_slv_drv_cb.wvalid && vif.wr_slv_drv_cb.wready) begin
+                w_beat_cnt++;
+                `uvm_info("WR_SLV_W", $sformatf("Slave accepted W beat %0d: data=0x%08h, strb=0x%01h, last=%0b",
+                          w_beat_cnt, vif.wr_slv_drv_cb.wdata, vif.wr_slv_drv_cb.wstrb, vif.wr_slv_drv_cb.wlast), UVM_FULL)
 
                 if (vif.wr_slv_drv_cb.wlast) begin
                     slv_w_bursts_done++;
+                end
+
+                // Periodic WREADY stall backpressure
+                if (cfg.enable_wready_stall && (w_beat_cnt % cfg.wready_stall_period == 0)) begin
+                    vif.wr_slv_drv_cb.wready <= 1'b0;
+                    repeat (cfg.wready_stall_cycles) @(vif.wr_slv_drv_cb);
+                    vif.wr_slv_drv_cb.wready <= 1'b1;
                 end
             end
         end
     endtask : slave_handle_w
 
-    // Slave B Channel: drives write response once AW and W bursts complete
+    // Slave B Channel: drives write response once AW and W bursts complete with configurable delay
     virtual task slave_handle_b();
         slv_aw_info_t aw_info;
         vif.wr_slv_drv_cb.bvalid <= 1'b0;
@@ -215,6 +255,10 @@ class axi_wr_driver #(
             end
             aw_info = slv_aw_q.pop_front();
             slv_w_bursts_done--;
+
+            if (cfg.bvalid_delay > 0) begin
+                repeat (cfg.bvalid_delay) @(vif.wr_slv_drv_cb);
+            end
 
             vif.wr_slv_drv_cb.bid    <= aw_info.id;
             vif.wr_slv_drv_cb.bresp  <= 2'b00; // AXI_RESP_OKAY
