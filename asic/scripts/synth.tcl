@@ -1,18 +1,19 @@
 ##############################################################################
-# Cadence Genus Synthesis Script - 100 MHz Target (Baseline Run)
+# Cadence Genus Synthesis Script
 # Target Design: axi_dma (Top-Level Controller)
 # Sub-modules:   axi_dma_rd, axi_dma_wr
 # Target Tech:   tutorial.lib (Cadence Generic CMOS Standard Cell Library)
-# Target Clock:  100.0 MHz (Period = 10.0 ns / 10000 ps)
+# Target Clock:  166.0 MHz (Period = 6.024 ns / 6024 ps)
 ##############################################################################
 
 set_db information_level 6
 
-# Create output directories relative to execution root
-file mkdir ../reports/100mhz
-file mkdir ../output/100mhz
+# Create output and report directories relative to execution root
+file mkdir ../reports
+file mkdir ../output
 
 # Technology Library and RTL Search Paths
+# Note: Adjust init_lib_search_path to match your Cadence installation environment
 set_db init_lib_search_path { 
     /home/installs/GENUS201/share/synth/tutorials/tech 
     /cadence/genus/tutorials/tech
@@ -39,14 +40,14 @@ read_hdl -v2001 {
 elaborate axi_dma
 
 # Structural Lint & Unresolved References Check
-check_design -unresolved > ../reports/100mhz/check_design.rpt
+check_design -unresolved > ../reports/check_design.rpt
 
 ##############################################################################
-# Timing Constraints (100.0 MHz Baseline Target)
+# Timing Constraints (166.0 MHz Maximum Operating Target)
 ##############################################################################
-set CLK_PERIOD 10.000
-set CLK_UNCERT 0.100
-set IO_DELAY   2.000
+set CLK_PERIOD 6.024
+set CLK_UNCERT 0.060
+set IO_DELAY   1.200
 
 create_clock -name "clk" -period $CLK_PERIOD [get_ports clk]
 set_clock_uncertainty $CLK_UNCERT [get_clocks clk]
@@ -67,20 +68,20 @@ syn_opt
 ##############################################################################
 # Quality of Results (QoR) Report Generation
 ##############################################################################
-report_timing > ../reports/100mhz/timing.rpt
-report_area   > ../reports/100mhz/area.rpt
-report_power  > ../reports/100mhz/power.rpt
-report_qor    > ../reports/100mhz/qor.rpt
-report_gates  > ../reports/100mhz/gates.rpt
+report_timing > ../reports/timing.rpt
+report_area   > ../reports/area.rpt
+report_power  > ../reports/power.rpt
+report_qor    > ../reports/qor.rpt
+report_gates  > ../reports/gates.rpt
 
 ##############################################################################
 # Export Gate-Level Netlist and Constraints
 ##############################################################################
-write_hdl > ../output/100mhz/axi_dma_netlist.v
-write_sdc > ../output/100mhz/axi_dma.sdc
+write_hdl > ../output/axi_dma_netlist.v
+write_sdc > ../output/axi_dma.sdc
 
 puts "\n=================================================================="
-puts "  100 MHz Synthesis Run Finished Successfully!"
-puts "  Reports saved in: ../reports/100mhz/"
-puts "  Deliverables in:  ../output/100mhz/"
+puts "  166 MHz Maximum Frequency Synthesis Run Finished!"
+puts "  Reports saved in: ../reports/"
+puts "  Deliverables in:  ../output/"
 puts "==================================================================\n"
