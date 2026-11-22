@@ -4,16 +4,16 @@
 
 The AMBA AXI4 DMA Subsystem features a dual-engine architecture comprising an MM2S (Memory-to-Stream) Read Controller and an S2MM (Stream-to-Memory) Write Controller. To achieve exhaustive functional verification, the test suite executes 17 dedicated feature tests across both pipelines.
 
-Each test case targets a specific hardware feature, microarchitectural mechanism, or protocol corner case within the synthesizable RTL cores ([`axi_dma_rd.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_rd.v) and [`axi_dma_wr.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_wr.v)).
+Each test case targets a specific hardware feature, microarchitectural mechanism, or protocol corner case within the synthesizable RTL cores (`axi_dma_rd.v` and `axi_dma_wr.v`).
 
-The preliminary smoke test ([`dma_sanity_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_sanity_test.sv)) is strictly preserved as a post-compile environment sanity check and is excluded from feature regression suites and coverage merge databases.
+The preliminary smoke test (`dma_sanity_test.sv`) is strictly preserved as a post-compile environment sanity check and is excluded from feature regression suites and coverage merge databases.
 
 ## 2. MM2S Read Pipeline Feature Verification (6 Tests)
 
 The MM2S Read Controller fetches data from memory-mapped addresses over the AXI4 Read Address (AR) and Read Data (R) channels and packages the data into continuous packets over the AXI4-Stream master interface.
 
 ### 2.1 `dma_rd_nominal_test`
-* **Source File:** [`dma_rd_nominal_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_nominal_test.sv)
+* **Source File:** `dma_rd_nominal_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Baseline MM2S Read Master state machine (`STATE_IDLE` -> `STATE_START` -> `STATE_READ`).
   * 32-bit aligned memory fetching through the AXI4 AR and R channels.
@@ -35,9 +35,9 @@ The MM2S Read Controller fetches data from memory-mapped addresses over the AXI4
   * `SCB_MM2S_PKT_LEN`: Stream packet length equals requested 64 bytes.
 
 ### 2.2 `dma_rd_multiburst_test`
-* **Source File:** [`dma_rd_multiburst_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_multiburst_test.sv)
+* **Source File:** `dma_rd_multiburst_test.sv`
 * **Targeted DUT Hardware Feature:**
-  * Multi-burst address decomposition logic in [`axi_dma_rd.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_rd.v).
+  * Multi-burst address decomposition logic in `axi_dma_rd.v`.
   * Automatic 16-beat burst length chunking for long transfer lengths exceeding the single-burst limit.
   * Internal address accumulator (`op_addr`) incrementation across successive bursts.
   * Seamless stream merging across burst boundaries with deferred `TLAST` generation.
@@ -60,9 +60,9 @@ The MM2S Read Controller fetches data from memory-mapped addresses over the AXI4
   * `SCB_MM2S_PKT_LEN`: Total packet length equals 256 bytes.
 
 ### 2.3 `dma_rd_4kb_split_test`
-* **Source File:** [`dma_rd_4kb_split_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_4kb_split_test.sv)
+* **Source File:** `dma_rd_4kb_split_test.sv`
 * **Targeted DUT Hardware Feature:**
-  * 4KB page boundary calculation logic in [`axi_dma_rd.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_rd.v).
+  * 4KB page boundary calculation logic in `axi_dma_rd.v`.
   * Hardware burst clamping logic enforcing ARM AMBA AXI4 Section A3.4.1 (no burst may cross a 4KB boundary).
   * Dynamic burst splitting into pre-boundary and post-boundary read operations.
 * **Verification Intent:** Prove that when a memory read spans across a 4KB address boundary, the hardware clamps the first burst to end at the boundary and initiates a new burst at the boundary base.
@@ -80,10 +80,10 @@ The MM2S Read Controller fetches data from memory-mapped addresses over the AXI4
   * `SCB_MM2S_BURST_ADDR`: Confirms Burst 2 begins exactly at `0x1000`.
 
 ### 2.4 `dma_rd_unaligned_test`
-* **Source File:** [`dma_rd_unaligned_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_unaligned_test.sv)
+* **Source File:** `dma_rd_unaligned_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Unaligned address handling logic (`ENABLE_UNALIGNED = 1`).
-  * Internal multi-stage barrel shifter in [`axi_dma_rd.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_rd.v).
+  * Internal multi-stage barrel shifter in `axi_dma_rd.v`.
   * Byte-shifting logic aligning unaligned memory data words onto byte lane 0 of the streaming interface.
   * Discard logic for prefix bytes in beat 0.
 * **Verification Intent:** Verify that reading from a non-word-aligned memory address causes the DMA to fetch aligned words, shift them through the internal barrel shifter, discard unused prefix bytes, and output a packed, continuous byte stream.
@@ -101,7 +101,7 @@ The MM2S Read Controller fetches data from memory-mapped addresses over the AXI4
   * `SCB_MM2S_PKT_LEN`: Stream length strictly equals 11 bytes.
 
 ### 2.5 `dma_rd_partial_len_test`
-* **Source File:** [`dma_rd_partial_len_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_partial_len_test.sv)
+* **Source File:** `dma_rd_partial_len_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Fractional length truncation logic in the MM2S egress datapath.
   * Stream byte qualifier (`TKEEP`) mask generation on the final transfer beat.
@@ -120,7 +120,7 @@ The MM2S Read Controller fetches data from memory-mapped addresses over the AXI4
   * `SCB_MM2S_PKT_LEN`: Verifies total bytes checked equals 13.
 
 ### 2.6 `dma_rd_backpressure_test`
-* **Source File:** [`dma_rd_backpressure_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_backpressure_test.sv)
+* **Source File:** `dma_rd_backpressure_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Elastic flow control and backpressure absorption in the read datapath.
   * Internal read FIFO full/empty watermark tracking.
@@ -143,7 +143,7 @@ The MM2S Read Controller fetches data from memory-mapped addresses over the AXI4
 The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` and commits them to memory-mapped buffers via AXI4 AW, W, and B channels.
 
 ### 3.1 `dma_wr_nominal_test`
-* **Source File:** [`dma_wr_nominal_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_nominal_test.sv)
+* **Source File:** `dma_wr_nominal_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Baseline S2MM Write Master state machine (`STATE_IDLE` -> `STATE_START` -> `STATE_WRITE`).
   * Ingress stream reception, internal write FIFO buffering, and AXI4 AW/W burst generation.
@@ -165,7 +165,7 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
   * `SCB_S2MM_STATUS`: Validates reported status length equals 64 bytes.
 
 ### 3.2 `dma_wr_b2b_test`
-* **Source File:** [`dma_wr_b2b_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_b2b_test.sv)
+* **Source File:** `dma_wr_b2b_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Descriptor queueing logic and pipelined state transitions.
   * Back-to-back transfer execution with zero idle cycles between descriptor completions.
@@ -183,9 +183,9 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
   * Both tags `0x08` and `0x09` retire with 100% byte accuracy.
 
 ### 3.3 `dma_wr_multiburst_test`
-* **Source File:** [`dma_wr_multiburst_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_multiburst_test.sv)
+* **Source File:** `dma_wr_multiburst_test.sv`
 * **Targeted DUT Hardware Feature:**
-  * Multi-burst write segmentation in [`axi_dma_wr.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_wr.v).
+  * Multi-burst write segmentation in `axi_dma_wr.v`.
   * 16-beat burst length clamping for streaming payloads exceeding 64 bytes.
   * Monotonic destination address progression across write bursts.
   * Status pulse gating until the final burst's write response completes.
@@ -207,9 +207,9 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
   * `SCB_S2MM_AWLEN_OVERFLOW`: Confirms no burst exceeds 16 beats.
 
 ### 3.4 `dma_wr_4kb_split_test`
-* **Source File:** [`dma_wr_4kb_split_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_4kb_split_test.sv)
+* **Source File:** `dma_wr_4kb_split_test.sv`
 * **Targeted DUT Hardware Feature:**
-  * 4KB boundary write clamp logic in [`axi_dma_wr.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_wr.v).
+  * 4KB boundary write clamp logic in `axi_dma_wr.v`.
   * Enforcing ARM AMBA AXI4 Section A3.4.1 for memory writes.
   * Burst fragmentation across the 4KB boundary while maintaining continuous stream consumption.
 * **Verification Intent:** Verify that memory write bursts crossing a 4KB page boundary are split without dropping or misaligning stream beats.
@@ -226,10 +226,10 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
   * `SCB_S2MM_BURST_ADDR`: Confirms Burst 2 begins exactly at `0x1000`.
 
 ### 3.5 `dma_wr_unaligned_test`
-* **Source File:** [`dma_wr_unaligned_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_unaligned_test.sv)
+* **Source File:** `dma_wr_unaligned_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Unaligned write address alignment (`ENABLE_UNALIGNED = 1`).
-  * Sparse write strobe (`WSTRB`) generation logic in [`axi_dma_wr.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_wr.v).
+  * Sparse write strobe (`WSTRB`) generation logic in `axi_dma_wr.v`.
   * Masking of unaligned prefix byte lanes in beat 0 and suffix lanes in the final beat.
 * **Verification Intent:** Verify that writing to a non-word-aligned destination address generates sparse `WSTRB` bits to prevent overwriting adjacent memory locations.
 * **Stimulus Configuration:**
@@ -246,7 +246,7 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
   * Proves byte lane 0 of word `0x2000` is unwritten and uncorrupted.
 
 ### 3.6 `dma_wr_partial_len_test`
-* **Source File:** [`dma_wr_partial_len_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_partial_len_test.sv)
+* **Source File:** `dma_wr_partial_len_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Fractional tail write handling for word-aligned destinations.
   * Synthesis of sparse `WSTRB` on the final write beat for non-word-multiple lengths.
@@ -266,10 +266,10 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
   * `SCB_S2MM_STAT_LEN_MISMATCH`: Asserts reported status length equals 11.
 
 ### 3.7 `dma_wr_early_term_test`
-* **Source File:** [`dma_wr_early_term_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_early_term_test.sv)
+* **Source File:** `dma_wr_early_term_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Ingress stream early termination detection (`TLAST` arrives before buffer length is exhausted).
-  * Dynamic write burst truncation in [`axi_dma_wr.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_wr.v).
+  * Dynamic write burst truncation in `axi_dma_wr.v`.
   * Early status generation reporting actual bytes transferred rather than buffer capacity.
 * **Verification Intent:** Verify that when the stream source asserts `TLAST` prematurely, the DMA ceases memory writes, commits the truncated burst, and reports the actual transferred byte count.
 * **Stimulus Configuration:**
@@ -285,9 +285,9 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
   * Verifies that exactly 32 bytes are written to memory and status reports 32 bytes.
 
 ### 3.8 `dma_wr_excess_data_test`
-* **Source File:** [`dma_wr_excess_data_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_excess_data_test.sv)
+* **Source File:** `dma_wr_excess_data_test.sv`
 * **Targeted DUT Hardware Feature:**
-  * Buffer overrun protection and packet draining logic in [`axi_dma_wr.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_wr.v).
+  * Buffer overrun protection and packet draining logic in `axi_dma_wr.v`.
   * Hardware write cutoff at programmed buffer boundary.
   * Excess stream beat draining and dropping until `TLAST`.
   * Prevention of memory corruption on buffer overflow.
@@ -305,7 +305,7 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
   * Proves memory beyond `0x203F` is untouched.
 
 ### 3.9 `dma_wr_skew_test`
-* **Source File:** [`dma_wr_skew_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_skew_test.sv)
+* **Source File:** `dma_wr_skew_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Asynchronous control-data timing skew resilience.
   * **Data-First Skew:** Stream arrives before descriptor submission; DUT holds `TREADY = 0` to backpressure unallocated ingress data.
@@ -322,10 +322,10 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
   * Zero deadlocks, zero dropped beats across both skew modes.
 
 ### 3.10 `dma_wr_stream_bubble_test`
-* **Source File:** [`dma_wr_stream_bubble_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_stream_bubble_test.sv)
+* **Source File:** `dma_wr_stream_bubble_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Stream starvation resilience and inter-beat bubble tolerance.
-  * Internal 2-cycle skid buffer pipeline latency absorption ([`axi_dma_wr.v` lines 916-965](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_wr.v#L916-L965)).
+  * Internal 2-cycle skid buffer pipeline latency absorption (`axi_dma_wr.v` (lines 916-965)).
   * Inter-packet gap handling across multi-packet streaming sequences.
 * **Verification Intent:** Verify that streaming pauses (`TVALID = 0` bubbles) propagate through the 2-cycle write skid buffer without corrupting memory write strobes or stalling the pipeline.
 * **Stimulus Configuration:**
@@ -339,7 +339,7 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
   * 100% byte match across both sub-iterations with zero false stalls.
 
 ### 3.11 `dma_wr_backpressure_test`
-* **Source File:** [`dma_wr_backpressure_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_backpressure_test.sv)
+* **Source File:** `dma_wr_backpressure_test.sv`
 * **Targeted DUT Hardware Feature:**
   * Write datapath backpressure propagation and skid buffer saturation.
   * Slave `AWREADY` and `WREADY` stall handling.
@@ -360,20 +360,20 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
 
 | Test Case File | Pipeline | Transfer Length | Byte Alignment | Targeted DUT Feature | Key Scoreboard Checkers |
 | :--- | :---: | :---: | :---: | :--- | :--- |
-| [`dma_rd_nominal_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_nominal_test.sv) | MM2S | 64 B | Word-Aligned (`0x1000`) | Baseline read FSM, single burst, stream framing | `SCB_MM2S_DATA_MATCH`, `SCB_MM2S_PKT_COUNT` |
-| [`dma_rd_multiburst_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_multiburst_test.sv) | MM2S | 256 B | Word-Aligned (`0x2000`) | Multi-burst decomposition, address accumulator | `SCB_MM2S_BURST_ADDR`, `SCB_MM2S_PKT_LEN` |
-| [`dma_rd_4kb_split_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_4kb_split_test.sv) | MM2S | 64 B | Pre-boundary (`0x0FE0`) | 4KB page clamp, pre/post boundary burst split | `SCB_MM2S_4KB_CROSS`, `SCB_MM2S_BURST_ADDR` |
-| [`dma_rd_unaligned_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_unaligned_test.sv) | MM2S | 11 B | Unaligned (`0x1001`) | Barrel shifter, prefix byte discard | Address windowing, barrel shifter check |
-| [`dma_rd_partial_len_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_partial_len_test.sv) | MM2S | 13 B | Word-Aligned (`0x1000`) | Fractional tail truncation, final beat `TKEEP` | Final beat `TKEEP` mask (`4'b0001`) |
-| [`dma_rd_backpressure_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_backpressure_test.sv) | MM2S | 64 B | Word-Aligned (`0x3000`) | Read FIFO flow control, AR/R/TREADY stalls | FIFO watermark check, lossless resumption |
-| [`dma_wr_nominal_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_nominal_test.sv) | S2MM | 64 B | Word-Aligned (`0x2000`) | Baseline write FSM, full WSTRB, B response | `SCB_S2MM_DATA_MATCH`, `SCB_S2MM_STATUS` |
-| [`dma_wr_b2b_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_b2b_test.sv) | S2MM | 64 B + 64 B | Word-Aligned (`0x2000/40`) | Pipelined descriptor queue, zero-idle transition | `s2mm_queue` FIFO ordering, tag retirement |
-| [`dma_wr_multiburst_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_multiburst_test.sv) | S2MM | 256 B | Word-Aligned (`0x4000`) | 16-beat write chunking, address progression | `SCB_S2MM_BURST_ADDR`, `AWLEN_OVERFLOW` |
-| [`dma_wr_4kb_split_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_4kb_split_test.sv) | S2MM | 64 B | Pre-boundary (`0x0FE0`) | 4KB boundary write clamp, split AW/W bursts | `SCB_S2MM_4KB_CROSS`, `SCB_S2MM_BURST_ADDR` |
-| [`dma_wr_unaligned_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_unaligned_test.sv) | S2MM | 11 B | Unaligned (`0x2001`) | Sparse `WSTRB` generation on beat 0 and tail | Sparse `WSTRB` qualifier check |
-| [`dma_wr_partial_len_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_partial_len_test.sv) | S2MM | 11 B | Word-Aligned (`0x2000`) | Fractional write tail, partial final `WSTRB` | `SCB_S2MM_STAT_LEN_MISMATCH` |
-| [`dma_wr_early_term_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_early_term_test.sv) | S2MM | 32 B vs 64 B | Word-Aligned (`0x2000`) | Early `TLAST` detection, dynamic burst cutoff | `is_early_termination`, status len = 32 |
-| [`dma_wr_excess_data_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_excess_data_test.sv) | S2MM | 80 B vs 64 B | Word-Aligned (`0x2000`) | Overrun protection, excess stream draining | `SCB_S2MM_DROP_CHECK` (16 B dropped cleanly) |
-| [`dma_wr_skew_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_skew_test.sv) | S2MM | 64 B + 64 B | Word-Aligned (`0x2000`) | Asynchronous Data-First & Desc-First skew | `unmatched_axis_pkts` staging check |
-| [`dma_wr_stream_bubble_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_stream_bubble_test.sv) | S2MM | 64 B + 128 B | Word-Aligned (`0x2000/10`) | Stream bubble tolerance, 2-cycle skid latency | 2-cycle skid buffer phase latency check |
-| [`dma_wr_backpressure_test.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_backpressure_test.sv) | S2MM | 64 B | Word-Aligned (`0x2000`) | Write skid buffer saturation, AW/W/B stalls | Upstream `TREADY` throttling, deadlock check |
+| `dma_rd_nominal_test.sv` | MM2S | 64 B | Word-Aligned (`0x1000`) | Baseline read FSM, single burst, stream framing | `SCB_MM2S_DATA_MATCH`, `SCB_MM2S_PKT_COUNT` |
+| `dma_rd_multiburst_test.sv` | MM2S | 256 B | Word-Aligned (`0x2000`) | Multi-burst decomposition, address accumulator | `SCB_MM2S_BURST_ADDR`, `SCB_MM2S_PKT_LEN` |
+| `dma_rd_4kb_split_test.sv` | MM2S | 64 B | Pre-boundary (`0x0FE0`) | 4KB page clamp, pre/post boundary burst split | `SCB_MM2S_4KB_CROSS`, `SCB_MM2S_BURST_ADDR` |
+| `dma_rd_unaligned_test.sv` | MM2S | 11 B | Unaligned (`0x1001`) | Barrel shifter, prefix byte discard | Address windowing, barrel shifter check |
+| `dma_rd_partial_len_test.sv` | MM2S | 13 B | Word-Aligned (`0x1000`) | Fractional tail truncation, final beat `TKEEP` | Final beat `TKEEP` mask (`4'b0001`) |
+| `dma_rd_backpressure_test.sv` | MM2S | 64 B | Word-Aligned (`0x3000`) | Read FIFO flow control, AR/R/TREADY stalls | FIFO watermark check, lossless resumption |
+| `dma_wr_nominal_test.sv` | S2MM | 64 B | Word-Aligned (`0x2000`) | Baseline write FSM, full WSTRB, B response | `SCB_S2MM_DATA_MATCH`, `SCB_S2MM_STATUS` |
+| `dma_wr_b2b_test.sv` | S2MM | 64 B + 64 B | Word-Aligned (`0x2000/40`) | Pipelined descriptor queue, zero-idle transition | `s2mm_queue` FIFO ordering, tag retirement |
+| `dma_wr_multiburst_test.sv` | S2MM | 256 B | Word-Aligned (`0x4000`) | 16-beat write chunking, address progression | `SCB_S2MM_BURST_ADDR`, `AWLEN_OVERFLOW` |
+| `dma_wr_4kb_split_test.sv` | S2MM | 64 B | Pre-boundary (`0x0FE0`) | 4KB boundary write clamp, split AW/W bursts | `SCB_S2MM_4KB_CROSS`, `SCB_S2MM_BURST_ADDR` |
+| `dma_wr_unaligned_test.sv` | S2MM | 11 B | Unaligned (`0x2001`) | Sparse `WSTRB` generation on beat 0 and tail | Sparse `WSTRB` qualifier check |
+| `dma_wr_partial_len_test.sv` | S2MM | 11 B | Word-Aligned (`0x2000`) | Fractional write tail, partial final `WSTRB` | `SCB_S2MM_STAT_LEN_MISMATCH` |
+| `dma_wr_early_term_test.sv` | S2MM | 32 B vs 64 B | Word-Aligned (`0x2000`) | Early `TLAST` detection, dynamic burst cutoff | `is_early_termination`, status len = 32 |
+| `dma_wr_excess_data_test.sv` | S2MM | 80 B vs 64 B | Word-Aligned (`0x2000`) | Overrun protection, excess stream draining | `SCB_S2MM_DROP_CHECK` (16 B dropped cleanly) |
+| `dma_wr_skew_test.sv` | S2MM | 64 B + 64 B | Word-Aligned (`0x2000`) | Asynchronous Data-First & Desc-First skew | `unmatched_axis_pkts` staging check |
+| `dma_wr_stream_bubble_test.sv` | S2MM | 64 B + 128 B | Word-Aligned (`0x2000/10`) | Stream bubble tolerance, 2-cycle skid latency | 2-cycle skid buffer phase latency check |
+| `dma_wr_backpressure_test.sv` | S2MM | 64 B | Word-Aligned (`0x2000`) | Write skid buffer saturation, AW/W/B stalls | Upstream `TREADY` throttling, deadlock check |

@@ -6,7 +6,7 @@
 
 The **S2MM (Stream-to-Memory) Write Engine** in the AXI4 DMA Subsystem bridges incoming packetized streaming data from an **AXI4-Stream (AXIS)** slave interface and writes that payload into system memory across an **AXI4 Memory-Mapped (AXI-MM)** write master interface (`AW`, `W`, `B` channels) according to write descriptor instructions.
 
-The **S2MM Scoreboard** in [dma_scoreboard.sv](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/env/dma_scoreboard.sv) acts as the golden reference oracle for the write datapath. It validates five core criteria:
+The **S2MM Scoreboard** in `dma_scoreboard.sv` acts as the golden reference oracle for the write datapath. It validates five core criteria:
 1. **End-to-End Data Integrity**: Zero byte corruption, drops, duplication, or reordering from ingress stream beats to committed memory write beats.
 2. **AXI-MM Write Address Progression**: Issues legal, sequentially aligned `AW` bursts matching the requested destination memory address without crossing 4KB page boundaries.
 3. **WSTRB Lane Qualification**: Accurate byte strobe generation (`WSTRB`) on first, intermediate, and final beats (including sub-word alignments and early `TLAST` terminations).

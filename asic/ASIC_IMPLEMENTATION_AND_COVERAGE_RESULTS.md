@@ -37,7 +37,7 @@ graph TD
 
 ## 2. ASIC Logic Synthesis & Timing Closure (Cadence Genus)
 
-The top-level DMA engine ([`axi_dma.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma.v)) and its constituent sub-engines ([`axi_dma_rd.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_rd.v) and [`axi_dma_wr.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_wr.v)) were synthesized using Cadence Genus against the generic standard cell library `tutorial.lib`.
+The top-level DMA engine (`axi_dma.v`) and its constituent sub-engines (`axi_dma_rd.v` and `axi_dma_wr.v`) were synthesized using Cadence Genus against the generic standard cell library `tutorial.lib`.
 
 ### 2.1 Synthesis Constraints & Operating Conditions
 * **Target Operating Frequency:** $166.67\text{ MHz}$ ($T_{clk} = 6.000\text{ ns}$ / $6000\text{ ps}$).
@@ -145,7 +145,7 @@ Sequential logic accounts for **51.1%** of the silicon budget ($4{,}652\text{ fl
 
 ### 3.4 Dynamic Power Dissipation (at 166.67 MHz)
 
-Static power analysis ([`power.rpt`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/asic/reports/power.rpt)) evaluated switching, internal, and leakage dissipation:
+Static power analysis (`power.rpt`) evaluated switching, internal, and leakage dissipation:
 
 | Circuit Category | Switching Power (W) | Internal Power (W) | Total Power (mW) | Power % |
 | :--- | :---: | :---: | :---: | :---: |
@@ -215,7 +215,7 @@ When presenting this work to reviewers, the following defense angles should be u
 
 ## 5. Multi-Tier Functional Coverage Model (`dma_coverage.sv`)
 
-The verification platform incorporates an exhaustive 4-tier functional coverage model implemented in [`dma_coverage.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/env/dma_coverage.sv), containing 12 distinct covergroups sampled by 8 passive monitor taps.
+The verification platform incorporates an exhaustive 4-tier functional coverage model implemented in `dma_coverage.sv`, containing 12 distinct covergroups sampled by 8 passive monitor taps.
 
 ```mermaid
 graph TD
@@ -275,23 +275,23 @@ make run_all_dma
 
 | # | Test Name | Pipeline | Category / Corner Case | Checked Bytes | Mismatches | Hangs | Verdict |
 | :-: | :--- | :---: | :--- | :-: | :-: | :-: | :---: |
-| 1 | [`dma_rd_nominal_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_nominal_test.sv) | MM2S | Single Burst Aligned (64 B) | 64 | 0 | 0 | **PASSED** |
-| 2 | [`dma_rd_multiburst_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_multiburst_test.sv) | MM2S | 4 x 16-Beat Multi-Burst (256 B) | 256 | 0 | 0 | **PASSED** |
-| 3 | [`dma_rd_4kb_split_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_4kb_split_test.sv) | MM2S | 4KB Page Boundary Crossing Split | 64 | 0 | 0 | **PASSED** |
-| 4 | [`dma_rd_unaligned_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_unaligned_test.sv) | MM2S | Unaligned Memory Read (Offset 1) | 11 | 0 | 0 | **PASSED** |
-| 5 | [`dma_rd_partial_len_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_partial_len_test.sv) | MM2S | Non-Word Fractional Length (13 B) | 13 | 0 | 0 | **PASSED** |
-| 6 | [`dma_rd_backpressure_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_rd_backpressure_test.sv) | MM2S | ARREADY / RREADY / TREADY Stalls | 64 | 0 | 0 | **PASSED** |
-| 7 | [`dma_wr_nominal_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_nominal_test.sv) | S2MM | Word-Aligned Stream-to-Memory (64 B) | 64 | 0 | 0 | **PASSED** |
-| 8 | [`dma_wr_b2b_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_b2b_test.sv) | S2MM | Back-to-Back Pipelined Descriptors | 128 | 0 | 0 | **PASSED** |
-| 9 | [`dma_wr_multiburst_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_multiburst_test.sv) | S2MM | 4 x 16-Beat Write Multi-Burst (256 B) | 256 | 0 | 0 | **PASSED** |
-| 10 | [`dma_wr_4kb_split_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_4kb_split_test.sv) | S2MM | 4KB Boundary Clamp Split (8+8 beats) | 64 | 0 | 0 | **PASSED** |
-| 11 | [`dma_wr_unaligned_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_unaligned_test.sv) | S2MM | Sparse WSTRB Unaligned Write (11 B) | 11 | 0 | 0 | **PASSED** |
-| 12 | [`dma_wr_partial_len_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_partial_len_test.sv) | S2MM | Fractional Tail Write (11 B, WSTRB=0x7) | 11 | 0 | 0 | **PASSED** |
-| 13 | [`dma_wr_early_term_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_early_term_test.sv) | S2MM | Ingress TLAST Early Cutoff (32 B / 64 B) | 32 | 0 | 0 | **PASSED** |
-| 14 | [`dma_wr_excess_data_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_excess_data_test.sv) | S2MM | Excess Stream Draining & Drop (80 B / 64 B)| 64 | 0 | 0 | **PASSED** |
-| 15 | [`dma_wr_skew_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_skew_test.sv) | S2MM | Data-First & Desc-First Timing Skew | 128 | 0 | 0 | **PASSED** |
-| 16 | [`dma_wr_stream_bubble_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_stream_bubble_test.sv) | S2MM | Stream Starvation & Skid Latency | 192 | 0 | 0 | **PASSED** |
-| 17 | [`dma_wr_backpressure_test`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/tests/dma_tests/dma_wr_backpressure_test.sv) | S2MM | AWREADY / WREADY / BVALID Stalls | 64 | 0 | 0 | **PASSED** |
+| 1 | `dma_rd_nominal_test` | MM2S | Single Burst Aligned (64 B) | 64 | 0 | 0 | **PASSED** |
+| 2 | `dma_rd_multiburst_test` | MM2S | 4 x 16-Beat Multi-Burst (256 B) | 256 | 0 | 0 | **PASSED** |
+| 3 | `dma_rd_4kb_split_test` | MM2S | 4KB Page Boundary Crossing Split | 64 | 0 | 0 | **PASSED** |
+| 4 | `dma_rd_unaligned_test` | MM2S | Unaligned Memory Read (Offset 1) | 11 | 0 | 0 | **PASSED** |
+| 5 | `dma_rd_partial_len_test` | MM2S | Non-Word Fractional Length (13 B) | 13 | 0 | 0 | **PASSED** |
+| 6 | `dma_rd_backpressure_test` | MM2S | ARREADY / RREADY / TREADY Stalls | 64 | 0 | 0 | **PASSED** |
+| 7 | `dma_wr_nominal_test` | S2MM | Word-Aligned Stream-to-Memory (64 B) | 64 | 0 | 0 | **PASSED** |
+| 8 | `dma_wr_b2b_test` | S2MM | Back-to-Back Pipelined Descriptors | 128 | 0 | 0 | **PASSED** |
+| 9 | `dma_wr_multiburst_test` | S2MM | 4 x 16-Beat Write Multi-Burst (256 B) | 256 | 0 | 0 | **PASSED** |
+| 10 | `dma_wr_4kb_split_test` | S2MM | 4KB Boundary Clamp Split (8+8 beats) | 64 | 0 | 0 | **PASSED** |
+| 11 | `dma_wr_unaligned_test` | S2MM | Sparse WSTRB Unaligned Write (11 B) | 11 | 0 | 0 | **PASSED** |
+| 12 | `dma_wr_partial_len_test` | S2MM | Fractional Tail Write (11 B, WSTRB=0x7) | 11 | 0 | 0 | **PASSED** |
+| 13 | `dma_wr_early_term_test` | S2MM | Ingress TLAST Early Cutoff (32 B / 64 B) | 32 | 0 | 0 | **PASSED** |
+| 14 | `dma_wr_excess_data_test` | S2MM | Excess Stream Draining & Drop (80 B / 64 B)| 64 | 0 | 0 | **PASSED** |
+| 15 | `dma_wr_skew_test` | S2MM | Data-First & Desc-First Timing Skew | 128 | 0 | 0 | **PASSED** |
+| 16 | `dma_wr_stream_bubble_test` | S2MM | Stream Starvation & Skid Latency | 192 | 0 | 0 | **PASSED** |
+| 17 | `dma_wr_backpressure_test` | S2MM | AWREADY / WREADY / BVALID Stalls | 64 | 0 | 0 | **PASSED** |
 | **TOTAL**| **17 Feature Tests** | **Full Suite** | **Comprehensive Regression** | **>1,400** | **0** | **0** | **100% PASS** |
 
 ### 6.2 Coverage Merge Database & Analysis Flow

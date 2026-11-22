@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-The current baseline AXI4 DMA engine implements a robust **Direct-Mode (Register/Port-Driven)** transfer datapath supporting unaligned addressing, 4KB page boundary splitting, and AXI-Stream conversion. However, architectural analysis of [axi_dma.v](file:///home/snu/Desktop/dma_dv_proj/axi4_rtl/axi_master_rtl/axi_dma.v), [axi_dma_rd.v](file:///home/snu/Desktop/dma_dv_proj/axi4_rtl/axi_master_rtl/axi_dma_rd.v), and [axi_dma_wr.v](file:///home/snu/Desktop/dma_dv_proj/axi4_rtl/axi_master_rtl/axi_dma_wr.v) reveals three fundamental performance bottlenecks:
+The current baseline AXI4 DMA engine implements a robust **Direct-Mode (Register/Port-Driven)** transfer datapath supporting unaligned addressing, 4KB page boundary splitting, and AXI-Stream conversion. However, architectural analysis of `axi_dma.v`, `axi_dma_rd.v`, and `axi_dma_wr.v` reveals three fundamental performance bottlenecks:
 
 1. **CPU Descriptor Bottleneck:** Descriptors are issued one-at-a-time over external ports. Operating systems (Linux) manage fragmented 4KB physical pages; moving a 1 MB buffer forces 256 CPU context-switches and interrupts, starving the DMA pipeline between transfers.
 2. **1D Linear Addressing Limitation:** AI/ML matrix multiplication (GEMM), convolution tiling, and video pipelines store data in 2D formats with stride offsets. Moving a 2D tile currently requires software to issue hundreds of single-row 1D descriptors.

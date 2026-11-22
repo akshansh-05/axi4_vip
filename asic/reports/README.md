@@ -15,4 +15,4 @@ When performing the synthesis run (`./run_synth.sh` or `genus -files synth.tcl`)
 | `gates.rpt` | Standard Cell Breakdown | Sequential flip-flops (`fflopd`), combinational logic (`nand2`, `nor2`), buffers |
 | `check_design.rpt` | Structural Lint Audit | Unresolved pins, floating nets, inferred latches (must be 0) |
 
-Once you place your `.rpt` / `.txt` files here, the summary tables in [ASIC_IMPLEMENTATION_AND_COVERAGE_RESULTS.md](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/asic/ASIC_IMPLEMENTATION_AND_COVERAGE_RESULTS.md) will be updated with the final 166 MHz numbers.
+Once you place your `.rpt` / `.txt` files here, the summary tables in `ASIC_IMPLEMENTATION_AND_COVERAGE_RESULTS.md` will be updated with the final 166 MHz numbers.

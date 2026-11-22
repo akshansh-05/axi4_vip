@@ -48,7 +48,7 @@ Traditional transaction-level scoreboards rely on standard input-to-output FIFO 
 * **Temporal Asynchrony & Skew:** Streaming packets can arrive tens of cycles before or after host descriptor submission (Data-First vs. Descriptor-First timing skew).
 * **Truncation & Excess Dropping:** The DMA controller hardware dynamically clamps memory write bursts upon reaching programmed buffer capacities, requiring the reference model to distinguish between valid early terminations and uncorrupted data dropping.
 
-To resolve these challenges, the [`dma_scoreboard.sv`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/uvm/env/dma_scoreboard.sv) implements a **Predictive Algorithmic Reference Model** that decouples cycle-accurate hardware events into mathematical transformations, maintaining lockstep alignment across all asynchronous protocol boundaries.
+To resolve these challenges, the `dma_scoreboard.sv` implements a **Predictive Algorithmic Reference Model** that decouples cycle-accurate hardware events into mathematical transformations, maintaining lockstep alignment across all asynchronous protocol boundaries.
 
 ## 2. Dual-Engine Prediction Models
 
@@ -200,7 +200,7 @@ sequenceDiagram
 ```
 
 ### 4.1 Resolving the 2-Cycle Skid Buffer Latency
-Hardware analysis of [`axi_dma_wr.v` lines 916-965](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_wr.v#L916-L965) reveals an internal skid buffer (`out_fifo`) between the streaming receiver and the AXI W-channel driver. 
+Hardware analysis of [`axi_dma_wr.v` lines 916-965] reveals an internal skid buffer (`out_fifo`) between the streaming receiver and the AXI W-channel driver. 
 * When `s_axis_write_data_tvalid && s_axis_write_data_tready` handshakes at cycle $T_0$, the data word enters the internal register pipeline.
 * The physical AXI write channel asserts `m_axi_wvalid` at cycle $T_0 + 2$.
 * If an inter-beat bubble is injected on the stream bus, the bubble manifests on the AXI memory bus exactly 2 cycles later.
