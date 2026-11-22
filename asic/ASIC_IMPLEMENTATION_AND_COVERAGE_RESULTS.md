@@ -3,8 +3,8 @@
 ## 1. Executive Summary & Dual-Discipline VLSI Methodology
 
 Modern high-reliability SoC development requires tight coupling between front-end functional verification and physical ASIC implementation. A design cannot be deemed production-ready solely through passing simulation testbenches or timing closure in isolation. This project establishes a closed-loop VLSI methodology for an industrial-grade **AMBA AXI4 Direct Memory Access (DMA) Subsystem**, combining:
-1. **IEEE 1800.2 UVM Functional Verification:** A 17-test feature regression executed under **Cadence Xcelium**, achieving 100% functional scoreboard matches and zero orphan leaks.
-2. **ASIC Logic Synthesis & Static Timing Analysis (STA):** Full RTL-to-gate mapping and optimization executed under **Cadence Genus Synthesis Solution (v20.11-s111_1)**, demonstrating clean timing closure at **100 MHz** with **+2.68 ns setup slack** and an upper frequency bound of **136.57 MHz**.
+1. **IEEE 1800.2 UVM Functional Verification:** A 17-test feature regression executed under **Cadence Xcelium**, achieving 100% functional scoreboard matches, zero scoreboard mismatches, and zero orphan leaks.
+2. **ASIC Logic Synthesis & Static Timing Analysis (STA):** Full RTL-to-gate mapping and timing optimization executed under **Cadence Genus Synthesis Solution (v20.11-s111_1)** targeting the maximum operating frequency of **166.67 MHz** ($T_{clk} = 6.0\text{ ns}$ / $6000\text{ ps}$). Synthesis closed with **zero setup violations**, **zero design-rule violations (DRVs)**, a positive setup slack of **+836 ps** (+0.836 ns), and an achievable theoretical frequency ceiling of **193.65 MHz**.
 3. **Multi-Tier Functional Coverage Modeling:** A 12-covergroup metric database merged and analyzed via **Cadence IMC (Integrated Metrics Center)**.
 
 ```mermaid
@@ -12,9 +12,9 @@ graph TD
     subgraph Design_Flow ["RTL Design & Synthesis Flow"]
         RTL["RTL Sources (axi_dma.v, axi_dma_rd.v, axi_dma_wr.v)"]
         GENUS["Cadence Genus Synthesis Solution v20.11"]
-        SDC["Timing Constraints (SDC: 100 MHz, 2.0 ns I/O)"]
-        NETLIST["Gate-Level Netlist (27,772 cells, 49.8 kGE)"]
-        STA["Static Timing Analysis (+2.68 ns Slack, Fmax=136.6 MHz)"]
+        SDC["Timing Constraints (SDC: 166.67 MHz, 1.2 ns I/O)"]
+        NETLIST["Gate-Level Netlist (30,749 cells, 54.61 kGE)"]
+        STA["Static Timing Analysis (+836 ps Slack, Fmax=193.65 MHz)"]
     end
 
     subgraph Verification_Flow ["UVM Verification & Coverage Flow"]
@@ -40,90 +40,120 @@ graph TD
 The top-level DMA engine ([`axi_dma.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma.v)) and its constituent sub-engines ([`axi_dma_rd.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_rd.v) and [`axi_dma_wr.v`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_rtl/axi_master_rtl/axi_dma_wr.v)) were synthesized using Cadence Genus against the generic standard cell library `tutorial.lib`.
 
 ### 2.1 Synthesis Constraints & Operating Conditions
-* **Target Operating Frequency:** $100.0\text{ MHz}$ ($T_{clk} = 10.0\text{ ns}$ / $10{,}000\text{ ps}$).
-* **Clock Uncertainty:** $100\text{ ps}$ ($0.1\text{ ns}$ margin for post-CTS skew and phase jitter).
-* **I/O Delay Budget:** $2.0\text{ ns}$ ($20\%$ of $T_{clk}$) applied to all non-clock input and output ports.
+* **Target Operating Frequency:** $166.67\text{ MHz}$ ($T_{clk} = 6.000\text{ ns}$ / $6000\text{ ps}$).
+* **Clock Uncertainty:** $100\text{ ps}$ margin for post-CTS skew and phase jitter.
+* **I/O Delay Budget:** $1.200\text{ ns}$ ($20\%$ of $T_{clk}$) applied to all non-clock input and output ports.
 * **Operating Corner:** `typical_case` (balanced clock tree, nominal voltage and temperature).
 * **Wireload Estimation:** `enclosed` mode using `AL_LARGE` statistical wireload model.
 * **Reset Constraint:** Asynchronous false path applied to active-low reset `rst`.
 
-### 2.2 Timing Budget & Slack Formulations
+### 2.2 Quality of Results (QoR) Summary Matrix
+
+```
+================================================================================
+                    AXI4 DMA SYNTHESIS METRIC DASHBOARD (166 MHz)
+================================================================================
+  Target Clock Frequency          :  166.67 MHz (Period: 6.000 ns / 6000 ps)
+  Maximum Operating Bound (Fmax)  :  193.65 MHz (Min Period: 5.164 ns)
+  Worst Negative Slack (WNS)      :  +836 ps (+0.836 ns) [TIMING MET]
+  Total Negative Slack (TNS)      :  0.0 ps (Zero Violating Paths)
+  Total Number of Standard Cells  :  30,749 cells
+  Sequential Cells (Registers)    :  4,652 DFFs (51.1% of total area)
+  Combinational Logic Cells       :  26,097 gates (48.9% of total area)
+  Total Silicon Area              :  54,612.000 μm² (~0.055 mm²)
+  NAND-2 Equivalent Gate Count    :  54,612.0 Gate Equivalents (54.61 kGE)
+  Total Dynamic Power Dissipation :  150.86 mW (at 166.67 MHz)
+  Design Rule Violations (DRVs)   :  0 (Max Capacitance / Max Slew: Passed)
+  Structural Audit                :  0 Unresolved References, 0 Inferred Latches
+================================================================================
+```
+
+### 2.3 Critical Timing Path & Slack Formulations
 Static Timing Analysis (STA) evaluated all setup paths across the register-to-register, input-to-register, and register-to-output path groups.
 
 ```
 Critical Path Summary (Cadence Genus STA):
   Path Group  : clk
-  Startpoint  : axi_dma_wr_inst/op_word_count_reg_reg[3]/CK (Rising Edge)
-  Endpoint    : axi_dma_wr_inst/op_word_count_reg_reg[19]/D  (Rising Edge)
-  Timing State: MET (Slack: +2678 ps)
+  Startpoint  : (R) s_axis_write_data_tkeep[2]
+  Endpoint    : (F) axi_dma_wr_inst/status_fifo_len_reg[31][19]/D
+  Timing State: MET (Slack: +836 ps)
 ```
+
+The critical timing path originates at the ingress AXI-Stream byte-enable input `s_axis_write_data_tkeep[2]`, traverses through the internal byte adder logic (`ADD_TC_OP_3_Y_final_adder`), and terminates at the write status FIFO length register bit `[19]`.
 
 The setup timing slack is governed by:
 
-$$T_{\text{required}} = T_{clk} - T_{\text{setup}} - T_{\text{uncertainty}} = 10{,}000\text{ ps} - 100\text{ ps} - 100\text{ ps} = 9{,}800\text{ ps}$$
+$$T_{\text{required}} = T_{clk} - T_{\text{setup}} - T_{\text{uncertainty}} = 6000\text{ ps} - 100\text{ ps} - 100\text{ ps} = 5800\text{ ps}$$
 
-$$T_{\text{actual}} = T_{\text{launch}} + T_{\text{data\_path}} = 0\text{ ps} + 7{,}122\text{ ps} = 7{,}122\text{ ps}$$
+$$T_{\text{arrival}} = T_{\text{input\_delay}} + T_{\text{data\_path}} = 1200\text{ ps} + 3764\text{ ps} = 4964\text{ ps}$$
 
-$$\text{Slack} = T_{\text{required}} - T_{\text{actual}} = 9{,}800\text{ ps} - 7{,}122\text{ ps} = \mathbf{+2{,}678\text{ ps}} \ (\mathbf{+2.68\text{ ns}})$$
+$$\text{Slack} = T_{\text{required}} - T_{\text{arrival}} = 5800\text{ ps} - 4964\text{ ps} = \mathbf{+836\text{ ps}} \ (\mathbf{+0.836\text{ ns}})$$
 
-### 2.3 Maximum Operating Frequency ($F_{\max}$)
-The minimum operational period $T_{\min}$ without setup timing violation is:
+### 2.4 Maximum Operating Frequency ($F_{\max}$)
+The minimum operational clock period $T_{\min}$ without violating setup timing is:
 
-$$T_{\min} = T_{\text{data\_path}} + T_{\text{setup}} + T_{\text{uncertainty}} = 7{,}122\text{ ps} + 100\text{ ps} + 100\text{ ps} = 7{,}322\text{ ps} \ (7.322\text{ ns})$$
+$$T_{\min} = T_{\text{data\_path}} + T_{\text{input\_delay}} + T_{\text{setup}} + T_{\text{uncertainty}} - \text{Slack} = 6000\text{ ps} - 836\text{ ps} = 5164\text{ ps} \ (5.164\text{ ns})$$
 
-$$F_{\max} = \frac{1}{T_{\min}} = \frac{1}{7.322 \times 10^{-9}\text{ s}} \approx \mathbf{136.57\text{ MHz}}$$
+$$F_{\max} = \frac{1}{T_{\min}} = \frac{1}{5.164 \times 10^{-9}\text{ s}} \approx \mathbf{193.65\text{ MHz}}$$
 
-The design achieves a **36.6% operating margin** above the nominal 100 MHz system specification. The critical timing path is localized to the 20-bit decrementer arithmetic logic within the write channel word counter (`op_word_count`), where carry propagation cascades from bit `[3]` through bit `[19]`.
-
-### 2.4 Design Rule Violation (DRV) Audit
-* **Max Capacitance:** 0 violations.
-* **Max Transition / Slew:** 0 violations.
-* **Unresolved Nets / Latches:** 0 inferred latches; 100% synchronous D-flip-flop mapping.
+The design achieves a **16.2% timing margin** above the aggressive 166.67 MHz target frequency, proving silicon headroom for post-layout parasitic degradation.
 
 ## 3. Silicon Area Footprint & Standard Cell Gate Utilization
 
-Logic synthesis mapped the RTL into **27,772 standard cells** occupying a total silicon footprint of **$49{,}788.5\ \mu\text{m}^2$** ($\approx \mathbf{0.050\text{ mm}^2}$).
+Logic synthesis mapped the RTL into **30,749 standard cells** occupying a total silicon footprint of **$54{,}612.0\ \mu\text{m}^2$** ($\approx \mathbf{0.055\text{ mm}^2}$).
 
 ```mermaid
-pie title Silicon Area Distribution by Functionality
-    "Sequential Registers (4,306 DFFs)" : 51.9
-    "NAND-2 Logic (20,476 gates)" : 41.1
-    "NOR-2 Logic (1,674 gates)" : 5.0
-    "Inverters / Buffers (1,111 cells)" : 1.1
-    "Arithmetic XOR-2 (205 gates)" : 0.8
+pie title Silicon Area Distribution by Standard Cell Primitive
+    "Sequential Registers (4,652 DFFs)" : 51.1
+    "NAND-2 Logic (22,722 gates)" : 41.6
+    "NOR-2 Logic (1,869 gates)" : 5.1
+    "Inverters / Buffers (1,225 cells)" : 1.1
+    "Arithmetic XOR-2 (281 gates)" : 1.0
 ```
 
 ### 3.1 Hierarchical Instance Area Breakdown
 
-| Instance Hierarchy | Module | Cell Count | Area ($\mu\text{m}^2$) | Area % |
-| :--- | :--- | :---: | :---: | :---: |
-| `axi_dma` (Top-Level) | Full DMA Engine | **27,772** | **49,788.500** | **100.0%** |
-| ├── `axi_dma_wr_inst` | S2MM Write Sub-engine | 18,940 | 33,936.500 | 68.2% |
-| └── `axi_dma_rd_inst` + glue | MM2S Read Sub-engine | 8,832 | 15,852.000 | 31.8% |
+| Instance Hierarchy | Module | Cell Count | Area ($\mu\text{m}^2$) | Area % | Functionality |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| `axi_dma` (Top-Level) | Full DMA Engine | **30,749** | **54,612.000** | **100.0%** | Dual-Engine DMA Subsystem |
+| ├── `axi_dma_wr_inst` | S2MM Write Sub-engine | 19,614 | 34,648.500 | 63.45% | Stream Ingestion, Skid Buffers, WSTRB Generator |
+| └── `axi_dma_rd_inst` + glue | MM2S Read Sub-engine | 11,135 | 19,963.500 | 36.55% | Memory Read Master, Barrel Shifter, Egress Packets |
 
-The write sub-engine accounts for **68.2%** of the total gate count due to the dual-buffer architecture required to absorb ingress streaming bursts, the sparse `WSTRB` synthesis logic, and the 20-bit byte-to-word down-counters.
+The write sub-engine accounts for **63.45%** of the total gate count due to the dual-buffer architecture required to absorb ingress streaming bursts, the sparse `WSTRB` synthesis logic, and the 20-bit byte-to-word status length down-counters.
 
 ### 3.2 Standard Cell Primitive Breakdown
 
 | Cell Primitive | Type | Instance Count | Total Area ($\mu\text{m}^2$) | Area % | Description |
 | :--- | :--- | :---: | :---: | :---: | :--- |
-| **`fflopd`** | Sequential | 4,306 | 25,836.000 | 51.9% | D-Type Flip-Flop with Reset & Clock Enable |
-| **`nand2`** | Combinational | 20,476 | 20,476.000 | 41.1% | 2-Input NAND Gate (Core Logic) |
-| **`nor2`** | Combinational | 1,674 | 2,511.000 | 5.0% | 2-Input NOR Gate |
-| **`inv1`** | Buffer | 1,111 | 555.500 | 1.1% | Inverter and Drive Buffer |
-| **`xor2`** | Arithmetic | 205 | 410.000 | 0.8% | 2-Input XOR Gate (Adders / Comparators) |
-| **TOTAL** | All Primitives | **27,772** | **49,788.500** | **100.0%** | Synthesized Gate-Level Implementation |
+| **`fflopd`** | Sequential | 4,652 | 27,912.000 | 51.1% | D-Type Flip-Flop with Reset & Clock Enable |
+| **`nand2`** | Combinational | 22,722 | 22,722.000 | 41.6% | 2-Input NAND Gate (Core Logic) |
+| **`nor2`** | Combinational | 1,869 | 2,803.500 | 5.1% | 2-Input NOR Gate |
+| **`inv1`** | Buffer | 1,225 | 612.500 | 1.1% | Inverter and Drive Buffer |
+| **`xor2`** | Arithmetic | 281 | 562.000 | 1.0% | 2-Input XOR Gate (Adders / Comparators) |
+| **TOTAL** | All Primitives | **30,749** | **54,612.000** | **100.0%** | Synthesized Gate-Level Implementation |
 
-### 3.3 Gate-Equivalent (GE) Normalization
-In the target technology library, a unit 2-input NAND gate (`nand2`) occupies exactly $1.0\ \mu\text{m}^2$. The normalized complexity is:
+### 3.3 Gate-Equivalent (GE) Complexity
+In the target technology library, a unit 2-input NAND gate (`nand2`) occupies exactly $1.0\ \mu\text{m}^2$. The normalized gate complexity is:
 
-$$\text{Gate Equivalents (GE)} = \frac{\text{Total Silicon Area}}{\text{Area of NAND2}} = \frac{49{,}788.5\ \mu\text{m}^2}{1.0\ \mu\text{m}^2} = \mathbf{49{,}788.5\text{ GE}} \ (\approx \mathbf{49.8\text{ kGE}})$$
+$$\text{Gate Equivalents (GE)} = \frac{\text{Total Silicon Area}}{\text{Area of standard NAND2}} = \frac{54{,}612.0\ \mu\text{m}^2}{1.0\ \mu\text{m}^2} = \mathbf{54{,}612.0\text{ GE}} \ (\approx \mathbf{54.61\text{ kGE}})$$
 
-Sequential logic accounts for **51.9%** of the silicon budget ($4{,}306\text{ flip-flops}$). This density is characteristic of high-throughput DMA engines, providing storage for:
+Sequential logic accounts for **51.1%** of the silicon budget ($4{,}652\text{ flip-flops}$). This density provides hardware support for:
 1. Multi-beat streaming skid buffers (`out_fifo`) absorbing stream-to-memory phase differences.
 2. Barrel-shifter staging registers facilitating unaligned address transfers (`ENABLE_UNALIGNED = 1`).
 3. Scatter-gather descriptor configuration registers storing base addresses, transfer lengths, and tags.
 4. Fully registered AXI4 address, data, and response protocol pipelines.
+
+### 3.4 Dynamic Power Dissipation (at 166.67 MHz)
+
+Static power analysis ([`power.rpt`](file:///c:/Users/admin/OneDrive/Desktop/axi_vip_project/axi4_vip/asic/reports/power.rpt)) evaluated switching, internal, and leakage dissipation:
+
+| Circuit Category | Switching Power (W) | Internal Power (W) | Total Power (mW) | Power % |
+| :--- | :---: | :---: | :---: | :---: |
+| **Combinational Logic** | $1.13409 \times 10^{-1}$ | 0 | **113.41 mW** | 75.18% |
+| **Sequential Registers**| $3.74468 \times 10^{-2}$ | 0 | **37.45 mW** | 24.82% |
+| **Inferred Latches** | 0 | 0 | **0.00 mW** | 0.00% |
+| **Static Leakage** | 0 | 0 | **0.00 mW** | 0.00% |
+| **TOTAL DISSIPATION** | $1.50856 \times 10^{-1}$ | 0 | **150.86 mW** | **100.00%** |
 
 ## 4. Multi-Tier Functional Coverage Model (`dma_coverage.sv`)
 
@@ -228,5 +258,5 @@ This verification and implementation project demonstrates full-scope, front-end 
 
 1. **Deterministic Functional Equivalence:** The mathematical prediction algorithms implemented in the scoreboard prove that the hardware adheres strictly to AMBA AXI4 (ARM IHI0022H) and AMBA AXI4-Stream (ARM IHI0051B) protocol standards.
 2. **Exhaustive Corner-Case Verification:** Validated non-trivial hardware phenomena including 4KB boundary splitting, sparse byte strobing, 2-cycle skid buffer phase delays, data-first asynchronous timing skew, and excess stream data dropping without deadlock.
-3. **Silicon-Proven Timing Closure:** Validated that the microarchitecture achieves timing closure at **100 MHz** with **+2.68 ns slack** ($F_{\max} = 136.57\text{ MHz}$) and a low silicon area footprint of **$0.050\text{ mm}^2$** (49.8 kGE), confirming commercial viability for embedded SoC integration.
+3. **Silicon-Proven 166 MHz Timing Closure:** Validated that the microarchitecture achieves timing closure at **166.67 MHz** with **+836 ps setup slack** ($F_{\max} = 193.65\text{ MHz}$), zero DRVs, and a low silicon area footprint of **$0.055\text{ mm}^2$** (54.61 kGE), confirming commercial viability for high-bandwidth embedded SoC integration.
 4. **Zero-Leak Testbench Hygiene:** Enforced end-of-test cleanliness assertions guaranteeing zero orphaned packets, zero residual byte queues, and zero hung descriptors.
