@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 ##############################################################################
-# Cadence Genus Synthesis Execution Script (166 MHz Maximum Frequency Target)
+# Cadence Genus Synthesis Execution Script (166.67 MHz Nominal Target)
 # Usage:
 #   ./run_synth.sh
 ##############################################################################
 
 echo "=================================================================="
 echo " Starting Cadence Genus Synthesis for AXI4 DMA Subsystem"
-echo " Target Frequency: 166.0 MHz (Period: 6.024 ns)"
+echo " Target Frequency: 166.67 MHz (Clock Period: 6.000 ns / 6000 ps)"
 echo "=================================================================="
 
-# Ensure script is executed from the scripts directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}" || exit 1
 

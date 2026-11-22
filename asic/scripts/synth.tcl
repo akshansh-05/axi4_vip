@@ -3,7 +3,7 @@
 # Target Design: axi_dma (Top-Level Controller)
 # Sub-modules:   axi_dma_rd, axi_dma_wr
 # Target Tech:   tutorial.lib (Cadence Generic CMOS Standard Cell Library)
-# Target Clock:  166.0 MHz (Period = 6.024 ns / 6024 ps)
+# Target Clock:  166.67 MHz (Period = 6.000 ns / 6000 ps)
 ##############################################################################
 
 set_db information_level 6
@@ -13,7 +13,6 @@ file mkdir ../reports
 file mkdir ../output
 
 # Technology Library and RTL Search Paths
-# Note: Adjust init_lib_search_path to match your Cadence installation environment
 set_db init_lib_search_path { 
     /home/installs/GENUS201/share/synth/tutorials/tech 
     /cadence/genus/tutorials/tech
@@ -43,10 +42,10 @@ elaborate axi_dma
 check_design -unresolved > ../reports/check_design.rpt
 
 ##############################################################################
-# Timing Constraints (166.0 MHz Maximum Operating Target)
+# Timing Constraints (166.67 MHz Target Operating Frequency)
 ##############################################################################
-set CLK_PERIOD 6.024
-set CLK_UNCERT 0.060
+set CLK_PERIOD 6.000
+set CLK_UNCERT 0.100
 set IO_DELAY   1.200
 
 create_clock -name "clk" -period $CLK_PERIOD [get_ports clk]
@@ -81,7 +80,7 @@ write_hdl > ../output/axi_dma_netlist.v
 write_sdc > ../output/axi_dma.sdc
 
 puts "\n=================================================================="
-puts "  166 MHz Maximum Frequency Synthesis Run Finished!"
+puts "  166.67 MHz Nominal Frequency Synthesis Run Finished!"
 puts "  Reports saved in: ../reports/"
 puts "  Deliverables in:  ../output/"
 puts "==================================================================\n"
