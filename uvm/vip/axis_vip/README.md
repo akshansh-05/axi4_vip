@@ -202,3 +202,100 @@ The egress monitor connects to `m_axis_read_data_*`, utilizing the exact same cl
 * The DMA read engine emits well-formed continuous packets.
 * `TLAST` is asserted strictly on the final byte of the requested descriptor length.
 * Fractional `TKEEP` qualifiers match the expected residual byte count.
+
+## 5. Sequence Library & Traffic Injection (`axis_vip/sequences/`)
+
+The VIP includes a library of specialized sequences located in `sequences/` to generate ingress streaming stimulus and inject controlled slave receiver backpressure.
+
+```
+                           +-----------------------------------------------+
+                           |          axis_base_seq (Base Class)           |
+                           +-----------------------------------------------+
+                                                  |
+                 +--------------------------------+--------------------------------+
+                 |                                                                 |
+                 v (Master Producer Mode)                                          v (Slave Consumer Mode)
++------------------------------------+           +---------------------------------+---------------------------------+
+|        axis_packet_seq             |           |    axis_rd_backpressure_seq     |        axis_slave_rx_seq        |
++------------------------------------+           +---------------------------------+---------------------------------+
+| * Injects structured/randomized    |           | * Drives targeted backpressure  | * Reactive background responder |
+|   ingress stream traffic into DUT  |           |   profiles to axis_rd_driver    |   sinking egress stream beats   |
+| * Configurable beat bounds         |           | * ZERO_DELAY (wire-speed)       | * Fixed or randomized wait-state|
+| * Explicit partial TKEEP patterns  |           | * MIDWAY_FREEZE (20-cycle stall)|   stalls per beat (0-5 cycles)  |
+| * Inter-packet & inter-beat delays |           | * FULL_JITTER (random jitter    | * Unbounded background mode or  |
+|                                    |           |   with terminal TLAST stall)    |   bounded beat countdown mode   |
++------------------------------------+           +---------------------------------+---------------------------------+
+```
+
+### 5.1 Base Sequence (`axis_base_seq.sv`)
+Derives from `uvm_sequence #(axis_seq_item)` and establishes parameterized sequence item typedefs and common handles used by all derived streaming sequences.
+
+### 5.2 Ingress Traffic Generation (`axis_packet_seq.sv`)
+
+Used in tests targeting the S2MM write engine to drive ingress packets into `s_axis_write_data_*`.
+
+#### Sequence Configuration Knobs
+* `num_packets`: Total number of packets to generate (default: 1).
+* `min_beats` & `max_beats`: Constrains the range of beats generated per packet (default: 1 to 16).
+* `force_full_last_keep`: When set (`1'b1`), forces `keep` on the final beat to all 1s (`4'b1111`, full 32-bit word).
+* `forced_last_keep`: Assigns an explicit byte qualifier pattern to the final beat (e.g., `4'b0001` for 1 byte, `4'b0011` for 2 bytes, `4'b0111` for 3 bytes), testing unaligned write transfers.
+* `initial_delay`: Number of idle cycles before the first beat of packet 0.
+* `inter_packet_delay`: Idle cycles inserted between consecutive packets ($p > 0$) with `TVALID` held low.
+* `inter_beat_delay`: Idle cycles inserted between consecutive beats within a single packet.
+* `enable_random_beat_delay`: When `1'b1`, inter-beat delay varies randomly in $[0 : \text{inter\_beat\_delay}]$; when `1'b0`, injects an exact deterministic delay.
+
+#### Execution Implementation (`body()`)
+Iterates over $p \in [0, \text{num\_packets}-1]$, creates an `axis_seq_item`, sets initial delay on `delay[0]`, applies inline constraints matching the configured knobs, and executes standard `start_item(pkt)` and `finish_item(pkt)` handshakes:
+```systemverilog
+virtual task body();
+    item_type pkt;
+    for (int p = 0; p < num_packets; p++) begin
+        pkt = item_type::type_id::create($sformatf("axis_pkt_%0d", p));
+        start_item(pkt);
+        if (forced_last_keep != '0) begin
+            assert(pkt.randomize() with {
+                data.size() inside {[min_beats:max_beats]};
+                delay[0] == local::cur_pkt_delay;
+                foreach (delay[i]) if (i > 0) delay[i] == local::cur_beat_delay;
+                keep[data.size() - 1] == local::forced_last_keep;
+            });
+        end else if (force_full_last_keep) begin
+            assert(pkt.randomize() with {
+                data.size() inside {[min_beats:max_beats]};
+                delay[0] == local::cur_pkt_delay;
+                foreach (keep[i]) keep[i] == {KEEP_WIDTH{1'b1}};
+            });
+        end else begin
+            assert(pkt.randomize() with {
+                data.size() inside {[min_beats:max_beats]};
+                delay[0] == local::cur_pkt_delay;
+            });
+        end
+        finish_item(pkt);
+    end
+endtask : body
+```
+
+### 5.3 Egress Receiver Backpressure Sequences (Slave Consumer Model)
+
+When verifying the MM2S read engine, the read driver (`axis_rd_driver`) operates in slave consumer mode. To stress the DMA read engine's internal FIFOs and skid buffers, two reactive sequences are provided:
+
+#### 1. Targeted Backpressure Profiler (`axis_rd_backpressure_seq.sv`)
+Allows tests to inject exact, reproducible backpressure profiles:
+
+```systemverilog
+typedef enum {
+    AXIS_BP_ZERO_DELAY,     // Wire-speed acceptance (TREADY held high)
+    AXIS_BP_MIDWAY_FREEZE,  // Sustained 20-cycle freeze midway (tests FIFO watermarking)
+    AXIS_BP_FULL_JITTER     // Random jitter per beat [1:3] + terminal stall on TLAST
+} axis_bp_mode_e;
+```
+
+* **`AXIS_BP_ZERO_DELAY`:** Drives `req.ready_delay = 0` on every beat, validating maximum throughput and zero-bubble wire-speed streaming.
+* **`AXIS_BP_MIDWAY_FREEZE`:** When beat counter matches `freeze_beat` (default: beat 7), asserts `req.ready_delay = freeze_cycles` (default: 20 cycles). This forces the DMA read engine to fill its internal skid FIFO, hit its watermark, and halt upstream AXI memory read requests (`AR` channel).
+* **`AXIS_BP_FULL_JITTER`:** Injects randomized wait states (`$urandom_range(min_jitter, max_jitter)`) between intermediate beats, and applies a deliberate `final_stall` (default: 3 cycles) on the terminal beat right before `TLAST`.
+
+#### 2. Background Reactive Responder (`axis_slave_rx_seq.sv`)
+Acts as a persistent receiver throughout a test run:
+* **Background Operation (`num_beats == 0`):** Runs an infinite loop creating and randomizing `axis_seq_item` responses, sinking egress stream beats continuously with random wait-states ($[0:5]$ cycles) until test termination.
+* **Bounded Operation (`num_beats > 0`):** Sinks an exact number of beats before completing, allowing sequences to synchronize phase transitions.
