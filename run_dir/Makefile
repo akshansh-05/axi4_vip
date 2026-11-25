@@ -41,6 +41,7 @@ endif
         run_dma gui_dma \
         run_all_mm2s merge_cov_mm2s gui_cov_mm2s regr_mm2s \
         run_all_s2mm merge_cov_s2mm gui_cov_s2mm regr_s2mm \
+        run_all_conc merge_cov_conc gui_cov_conc regr_conc \
         run_all_dma merge_cov gui_cov regr_all_dma \
         run_ram gui_ram waves_ram \
         run_sys gui_sys \
@@ -64,15 +65,19 @@ help:
 	@echo "    make gui_dma [TEST=<name>]     : Run single DMA test with SimVision GUI"
 	@echo "    make run_all_mm2s              : Run all 6 MM2S tests + terminal summary"
 	@echo "    make run_all_s2mm              : Run all 11 S2MM tests + terminal summary"
-	@echo "    make run_all_dma               : Run all 17 DMA feature tests (MM2S+S2MM) + summary"
+	@echo "    make run_all_conc              : Run all 4 Concurrency tests + terminal summary"
+	@echo "    make run_all_dma               : Run all 21 DMA feature tests (MM2S+S2MM+CONC) + summary"
 	@echo "    make run_sys [TEST=<name>]     : Run Subsystem test (default: dma_sanity_test)"
 	@echo "    make run_ram [TEST=<name>]     : Run RAM test (default: axi_sanity_test)"
 	@echo "    make waves_ram                 : Open generated waves.shm in Cadence SimVision"
 	@echo ""
 	@echo " 3. COVERAGE REPORTING & MERGING (Cadence IMC):"
-	@echo "    make merge_cov                 : Merge ALL tests (MM2S + S2MM) into $(MERGED_ALL_DIR)"
+	@echo "    make merge_cov                 : Merge ALL tests (MM2S + S2MM + CONC) into $(MERGED_ALL_DIR)"
 	@echo "    make gui_cov                   : Open Cadence IMC GUI with Unified Merged DB ($(MERGED_ALL_DIR))"
 	@echo "    make regr_all_dma              : Full Regression (run_all_dma + merge_cov)"
+	@echo "    make merge_cov_conc            : Merge all Concurrency test coverage databases"
+	@echo "    make gui_cov_conc              : Open Cadence IMC GUI with Concurrency Merged DB"
+	@echo "    make regr_conc                 : Run all Concurrency tests + auto-merge coverage + reports"
 	@echo "    make merge_cov_s2mm            : Merge all S2MM test coverage databases"
 	@echo "    make gui_cov_s2mm              : Open Cadence IMC GUI with S2MM Merged DB"
 	@echo "    make regr_s2mm                 : Run all S2MM tests + auto-merge coverage + reports"
@@ -149,12 +154,20 @@ S2MM_TESTS := dma_wr_nominal_test \
               dma_wr_stream_bubble_test \
               dma_wr_backpressure_test
 
-# Complete DMA Feature Regression Suite (MM2S + S2MM = 17 Feature Tests)
+# Concurrency Feature Regression Suite (4 Feature Tests)
+CONC_TESTS := dma_conc_nominal_test \
+              dma_conc_identical_tag_test \
+              dma_conc_adjacent_addr_test \
+              dma_conc_backpressure_test
+
+# Complete DMA Feature Regression Suite (MM2S + S2MM + CONC = 21 Feature Tests)
 ALL_DMA_TESTS := $(MM2S_TESTS) \
-                 $(S2MM_TESTS)
+                 $(S2MM_TESTS) \
+                 $(CONC_TESTS)
 
 MERGED_MM2S_DIR := merged_mm2s
 MERGED_S2MM_DIR := merged_s2mm
+MERGED_CONC_DIR := merged_conc
 MERGED_ALL_DIR  := merged_dma
 MERGED_DIR      ?= $(MERGED_ALL_DIR)
 
@@ -283,11 +296,73 @@ gui_cov_s2mm:
 regr_s2mm: run_all_s2mm merge_cov_s2mm
 
 # -------------------------------------------------------------------------------
-# Full Unified DMA Feature Regression & Coverage Targets (MM2S + S2MM = 17 Tests)
+# Concurrency Regression & Coverage Targets (4 Feature Tests)
+# -------------------------------------------------------------------------------
+run_all_conc: setup
+	@echo "==============================================================================="
+	@echo " [REGRESSION] Executing All Concurrency Test Cases Sequentially with Full Coverage"
+	@echo "==============================================================================="
+	@for t in $(CONC_TESTS); do \
+		echo ""; \
+		echo ">>> [RUNNING TEST]: $$t ..."; \
+		$(MAKE) run_dma TEST=$$t GUI=0 || true; \
+	done
+	@echo ""
+	@echo "==============================================================================="
+	@echo "             CONCURRENCY REGRESSION TEST RESULTS SUMMARY                       "
+	@echo "==============================================================================="
+	@total=0; pass=0; fail=0; \
+	for t in $(CONC_TESTS); do \
+		total=$$((total + 1)); \
+		log_file="$(LOG_DIR)/sim_dma_$${t}.log"; \
+		if [ -f "$$log_file" ] && grep -q "UVM_ERROR : *0" "$$log_file" && grep -q "UVM_FATAL : *0" "$$log_file"; then \
+			printf "  %-32s : [PASSED]\n" "$$t"; \
+			pass=$$((pass + 1)); \
+		else \
+			printf "  %-32s : [FAILED] (see $$log_file)\n" "$$t"; \
+			fail=$$((fail + 1)); \
+		fi; \
+	done; \
+	echo "==============================================================================="; \
+	echo " Total Tests: $$total | Passed: $$pass | Failed: $$fail"; \
+	echo "==============================================================================="; \
+	if [ $$fail -ne 0 ]; then \
+		echo ">>> [REGRESSION FAILED] $$fail Concurrency test(s) failed or did not run."; \
+		exit 1; \
+	else \
+		echo ">>> [REGRESSION PASSED] All $$pass Concurrency tests completed with ZERO UVM errors!"; \
+	fi
+
+merge_cov_conc:
+	@echo "==============================================================================="
+	@echo " [IMC] Merging Coverage Across All Concurrency Tests into $(MERGED_CONC_DIR)"
+	@echo "==============================================================================="
+	@mkdir -p cov_html_report_conc
+	$(IMC_CMD) -execcmd "\
+		merge -out $(MERGED_CONC_DIR) $(foreach t,$(CONC_TESTS),cov_work/scope/$(t)); \
+		load cov_work/scope/$(MERGED_CONC_DIR); \
+		report -summary -out cov_conc_summary.txt -metrics all; \
+		report -detail -out cov_conc_detail.txt -metrics all -all; \
+		report -html -out cov_html_report_conc -detail -metrics all"
+	@echo "==============================================================================="
+	@echo ">>> 1. Concurrency Merged Coverage DB : cov_work/scope/$(MERGED_CONC_DIR)"
+	@echo ">>> 2. Summary Text Report            : cov_conc_summary.txt"
+	@echo ">>> 3. Detailed Text Report           : cov_conc_detail.txt"
+	@echo ">>> 4. Interactive HTML Report        : cov_html_report_conc/index.html"
+	@echo "==============================================================================="
+
+gui_cov_conc:
+	@echo "[IMC] Launching Cadence IMC GUI with Concurrency Merged Database: $(MERGED_CONC_DIR)..."
+	$(IMC_CMD) -load cov_work/scope/$(MERGED_CONC_DIR) &
+
+regr_conc: run_all_conc merge_cov_conc
+
+# -------------------------------------------------------------------------------
+# Full Unified DMA Feature Regression & Coverage Targets (MM2S + S2MM + CONC = 21 Tests)
 # -------------------------------------------------------------------------------
 run_all_dma: setup
 	@echo "==============================================================================="
-	@echo " [REGRESSION] Executing Full DMA Feature Regression (MM2S + S2MM = 17 Tests)"
+	@echo " [REGRESSION] Executing Full DMA Feature Regression (MM2S + S2MM + CONC = 21 Tests)"
 	@echo "==============================================================================="
 	@for t in $(ALL_DMA_TESTS); do \
 		echo ""; \
@@ -322,7 +397,7 @@ run_all_dma: setup
 
 merge_cov:
 	@echo "==============================================================================="
-	@echo " [IMC] Merging Unified Coverage Across ALL Tests (MM2S + S2MM) into $(MERGED_ALL_DIR)"
+	@echo " [IMC] Merging Unified Coverage Across ALL Tests (MM2S + S2MM + CONC) into $(MERGED_ALL_DIR)"
 	@echo "==============================================================================="
 	@mkdir -p cov_html_report
 	$(IMC_CMD) -execcmd "\
@@ -393,4 +468,4 @@ imc_gui:
 # -------------------------------------------------------------------------------
 clean:
 	@echo "[CLEAN] Removing simulation temporary files, logs, and databases..."
-	rm -rf xcelium.d xrun.* waves.shm *.vcd *.log *.key .simvision INCA_libs .bpad $(LOG_DIR) cov_work/ cov_html_report/ cov_html_report_s2mm/ cov_html_report_mm2s/ imc.log imc.key cov_merged_summary.txt cov_merged_detail.txt cov_s2mm_summary.txt cov_s2mm_detail.txt cov_mm2s_summary.txt cov_mm2s_detail.txt cov_report.txt cov_detailed_report.txt
+	rm -rf xcelium.d xrun.* waves.shm *.vcd *.log *.key .simvision INCA_libs .bpad $(LOG_DIR) cov_work/ cov_html_report/ cov_html_report_s2mm/ cov_html_report_mm2s/ cov_html_report_conc/ imc.log imc.key cov_merged_summary.txt cov_merged_detail.txt cov_s2mm_summary.txt cov_s2mm_detail.txt cov_mm2s_summary.txt cov_mm2s_detail.txt cov_conc_summary.txt cov_conc_detail.txt cov_report.txt cov_detailed_report.txt

@@ -356,7 +356,33 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
 * **Scoreboard Checkers & Invariants:**
   * Validates zero data loss, zero duplicate writes, and deadlock-free resumption.
 
-## 4. Comprehensive Test Execution & Feature Coverage Matrix
+## 4. Concurrency Verification Testcases (CONC)
+
+### 4.1 `dma_conc_nominal_test` (`CONC_01`)
+* **Source File:** `dma_conc_nominal_test.sv`
+* **Targeted DUT Hardware Feature:** Concurrent Full-Duplex Subsystem operation (`axi_dma.v`), simultaneous MM2S read and S2MM write transfers under unthrottled bus conditions.
+* **Verification Intent:** Prove baseline full-duplex functionality without structural hazards, wire aliasing, or dropped handshakes.
+* **Stimulus:** MM2S (64 B, `0x1000`, Tag `0x01`), S2MM (64 B, `0x2000`, Tag `0x02`), unthrottled memory and stream VIPs.
+
+### 4.2 `dma_conc_identical_tag_test` (`CONC_02`)
+* **Source File:** `dma_conc_identical_tag_test.sv`
+* **Targeted DUT Hardware Feature:** Descriptor tag tracking tables, completion FIFO queues, and status reporting logic in both engines.
+* **Verification Intent:** Prove complete namespace isolation between MM2S and S2MM when identical tags (`0xA5`) are issued concurrently.
+* **Stimulus:** MM2S (64 B, `0x1000`, Tag `0xA5`), S2MM (64 B, `0x2000`, Tag `0xA5`).
+
+### 4.3 `dma_conc_adjacent_addr_test` (`CONC_03`)
+* **Source File:** `dma_conc_adjacent_addr_test.sv`
+* **Targeted DUT Hardware Feature:** Internal address generation accumulators, downstream interconnect memory address decoding, spatial buffer locality.
+* **Verification Intent:** Prove that accessing contiguous, non-overlapping buffers within the exact same 4KB page (`addr[31:6]` identical) does not cause address aliasing or memory corruption.
+* **Stimulus:** MM2S reads `0x1000`–`0x103F` (64 B, Tag `0x11`), S2MM writes `0x1040`–`0x107F` (64 B, Tag `0x22`).
+
+### 4.4 `dma_conc_backpressure_test` (`CONC_04`)
+* **Source File:** `dma_conc_backpressure_test.sv`
+* **Targeted DUT Hardware Feature:** Dual-channel flow control, write skid buffer saturation, stream reactive TREADY backpressure, memory slave AW/W stalls.
+* **Verification Intent:** Prove complete flow-control isolation and deadlock immunity under opposing heavy backpressure on both channels.
+* **Stimulus:** MM2S stream sink asserts randomized `TREADY` jitter [1:3 cycles]; S2MM memory slave asserts `AWREADY` stalls [3:6 cycles], `WREADY` stalls (period 4, hold 3), and `BVALID` delay (3 cycles).
+
+## 5. Comprehensive Test Execution & Feature Coverage Matrix
 
 | Test Case File | Pipeline | Transfer Length | Byte Alignment | Targeted DUT Feature | Key Scoreboard Checkers |
 | :--- | :---: | :---: | :---: | :--- | :--- |
@@ -377,3 +403,7 @@ The S2MM Write Controller captures streaming packets from `s_axis_write_data_*` 
 | `dma_wr_skew_test.sv` | S2MM | 64 B + 64 B | Word-Aligned (`0x2000`) | Asynchronous Data-First & Desc-First skew | `unmatched_axis_pkts` staging check |
 | `dma_wr_stream_bubble_test.sv` | S2MM | 64 B + 128 B | Word-Aligned (`0x2000/10`) | Stream bubble tolerance, 2-cycle skid latency | 2-cycle skid buffer phase latency check |
 | `dma_wr_backpressure_test.sv` | S2MM | 64 B | Word-Aligned (`0x2000`) | Write skid buffer saturation, AW/W/B stalls | Upstream `TREADY` throttling, deadlock check |
+| `dma_conc_nominal_test.sv` | Full-Duplex | 64 B (RD) + 64 B (WR) | Word-Aligned (`0x1000` / `0x2000`) | Simultaneous MM2S & S2MM nominal full-duplex | Dual scoreboard checking, zero data leak |
+| `dma_conc_identical_tag_test.sv` | Full-Duplex | 64 B (RD) + 64 B (WR) | Word-Aligned (`0x1000` / `0x2000`) | Identical descriptor tags (`0xA5` on both engines) | Namespace isolation, independent tag retirement |
+| `dma_conc_adjacent_addr_test.sv` | Full-Duplex | 64 B (RD) + 64 B (WR) | Word-Aligned (`0x1000` / `0x1040`) | Contiguous adjacent buffers in same 4KB page | Shared-page decode isolation, no cross-corruption |
+| `dma_conc_backpressure_test.sv` | Full-Duplex | 64 B (RD) + 64 B (WR) | Word-Aligned (`0x1000` / `0x2000`) | Opposing stream sink jitter & memory write stalls | Cross-channel backpressure isolation, zero deadlock |

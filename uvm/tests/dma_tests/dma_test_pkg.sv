@@ -36,6 +36,12 @@ package dma_test_pkg;
     `include "dma_wr_stream_bubble_test.sv"
     `include "dma_wr_backpressure_test.sv"
 
+    // Concurrency Tests (CONC)
+    `include "dma_conc_nominal_test.sv"
+    `include "dma_conc_identical_tag_test.sv"
+    `include "dma_conc_adjacent_addr_test.sv"
+    `include "dma_conc_backpressure_test.sv"
+
 endpackage : dma_test_pkg
 
 `endif // DMA_TEST_PKG_SV

@@ -24,6 +24,10 @@ dma_wr_excess_data_test
 dma_wr_skew_test
 dma_wr_stream_bubble_test
 dma_wr_backpressure_test
+dma_conc_nominal_test
+dma_conc_identical_tag_test
+dma_conc_adjacent_addr_test
+dma_conc_backpressure_test
 
 # 2. SRAM Standalone Tests (RAM_STANDALONE)
 sram_base_test
